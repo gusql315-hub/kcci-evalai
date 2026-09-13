@@ -73,6 +73,41 @@ wireDialogDismiss($('drawer'), dismissDrawer);
 새 화면에서 데이터 접근 범위나 버튼 노출 여부를 판단할 때는 이 함수들을 재사용하고, 화면마다 별도의
 role 체크 로직을 새로 작성하지 않습니다.
 
+### 5. 평가 항목 템플릿 (중간평가/최종평가 공용)
+
+「평가 항목 관리」 화면(중간평가 항목 / 최종평가 항목 탭)은 하나의 공용 템플릿 시스템으로 구현되어 있습니다.
+새로운 평가 종류(예: 만족도 재조사 등)가 추가되더라도 이 시스템에 종류를 하나 더 등록하는 방식으로 확장합니다 —
+관리 화면·편집 다이얼로그를 새로 만들지 않습니다.
+
+| 함수/상수 | 역할 |
+|---|---|
+| `TEMPLATE_KINDS` | 템플릿 종류 정의(`interim`/`final`) — localStorage 키, 표시 라벨, 평가구분 문자열, 페이지네이션 키를 담는다. 새 템플릿 종류를 추가하려면 여기에 항목을 추가한다. |
+| `templateRows(kind)` / `saveTemplateRows(kind, rows)` | 종류별 항목 목록을 읽고 저장한다. |
+| `normalizeTemplateRow(r, i, defaultChoiceIndex)` | 항목 하나를 `{category, question, type:'score'\|'choice'\|'narrative', scale, options}` 형태로 정규화한다. |
+| `evalTemplateManagement()` / `editTemplate(kind)` / `templateEditRow(r, i)` / `saveEvalTemplate()` | 관리 화면·편집 다이얼로그·행 렌더링·저장 로직. `state.evalTemplateTab`으로 현재 탭(kind)을 관리한다. |
+
+문항 유형은 `score`(점수형) · `choice`(선택형) · `narrative`(서술형) 세 가지입니다. 서술형은 척도/선택지 설정이 없고,
+대신 아래 "서술형 응답 매칭·분석" 엔진이 응답 Excel/CSV에서 실제 텍스트를 추출해 분석합니다.
+
+### 6. 서술형 응답 매칭·분석 엔진 (Narrative response matching)
+
+응답 Excel/CSV의 열 제목을 평가 항목 관리에 등록된 질문과 매칭해, 점수형은 평균을 자동 계산하고
+서술형은 실제 응답 텍스트를 추출해 키워드 빈도 기반으로 요약합니다. **원본에 없는 의견을 새로 만들지 않는다는
+원칙**을 지키므로, 새로운 "AI 분석" 기능을 추가할 때도 이 엔진을 우선 재사용하세요.
+
+| 함수 | 역할 |
+|---|---|
+| `matchHeadersToTemplate(kind, headers)` | Excel/CSV 헤더를 템플릿 질문과 매칭(대괄호 태그 제거 후 비교). |
+| `averageColumn(rows, colIndex)` | 점수형 열의 평균을 계산(빈 값·숫자가 아닌 값 제외). |
+| `extractNarrativeColumn(rows, colIndex)` / `buildNarrativeItem(row, colIndex, rows)` | 서술형 열에서 실제 응답을 추출하고, 건수·요약·반복 키워드를 계산한다. |
+| `keywordFrequency(responses, topN)` / `tokenizeNarrative(text)` | 실제 응답 텍스트 기반 키워드 빈도 계산(불용어 제외). |
+| `classifyNarrativeSentiment(text)` | 긍정/부정 단어 사전 기반의 단순 감성 분류. |
+| `buildNarrativeAnalysis(matchedNarrativeCols, rows)` | 서술형 문항 분석(`narrativeItems`)과, 기존 canned 분석 화면(키워드/의견/개선방안/참여자별 피드백)과 **동일한 데이터 모양**으로 만든 `adapter`(실응답 기반 대체 데이터)를 함께 반환한다. `applyTemplateMatching()`(중간평가 자동 분석)과 `saveFinalEntry()`(최종평가 서술형 파일 업로드)가 이 함수를 공유한다. |
+| `parseXLSXFile(file)` (Services) | JSZip(이미 내장됨)으로 `.xlsx`를 직접 읽어 `{headers, rows}`로 반환한다. `.xlsx`도 CSV와 동일하게 실제 매칭에 사용된다. |
+
+새 화면에서 "실응답 기반인지 canned 샘플인지"를 구분해야 할 때는 `analysis.realNarrative` 플래그를 확인하세요
+(예: `midDiagnosis()`는 실응답 기반일 때 표시하지 않습니다 — 고정된 canned 진단 문구가 실제 데이터와 맞지 않을 수 있기 때문).
+
 ## 새 컴포넌트를 추가할 때 체크리스트
 
 - [ ] 기존 공용 컴포넌트로 해결되지 않는지 먼저 확인했다.

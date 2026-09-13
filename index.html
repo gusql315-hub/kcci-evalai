@@ -278,7 +278,7 @@ window.DemoData = {
   config: {targetScale:10, defaultScale:7},
   navigation: [
     ['','dashboard','대시보드','grid'],
-    ['등록 관리','business-manage','사업 관리','book'],['','company-manage','기업 관리','users'],['','course-manage','과정 관리','book'],['','final-template-manage','최종평가 항목 관리','report'],
+    ['등록 관리','business-manage','사업 관리','book'],['','company-manage','기업 관리','users'],['','course-manage','과정 관리','book'],['','final-template-manage','평가 항목 관리','report'],
     ['과정평가','final','훈련과정 목록','report'],
     ['계획서 AI 검토','plan','사업공모 계획서 검토','bulb'],
     ['사용자 관리','user-manage','사용자 관리','users'],
@@ -543,6 +543,56 @@ window.DemoData = {
    if(rows.some(r=>r.length!==rows[0].length))throw new Error('CSV 행마다 열 개수가 다릅니다. 구분자와 따옴표를 확인해주세요.');
    return {headers:rows[0],rows:rows.slice(1)};
  }
+ function xlsxColToIndex(ref){const m=String(ref||'').match(/^([A-Z]+)/);if(!m)return 0;let col=0;for(const ch of m[1])col=col*26+(ch.charCodeAt(0)-64);return col-1;}
+ function xlsxParseSharedStrings(xml){
+   if(!xml)return [];
+   const doc=new DOMParser().parseFromString(xml,'application/xml');
+   return [...doc.getElementsByTagName('si')].map(si=>[...si.getElementsByTagName('t')].map(t=>t.textContent).join(''));
+ }
+ function xlsxParseSheetRows(xml,shared){
+   const doc=new DOMParser().parseFromString(xml,'application/xml');
+   const rows=[...doc.getElementsByTagName('row')].map(rowEl=>{
+     const vals=[];let maxCol=-1;
+     [...rowEl.getElementsByTagName('c')].forEach(c=>{
+       const idx=xlsxColToIndex(c.getAttribute('r'));const type=c.getAttribute('t');const vEl=c.getElementsByTagName('v')[0];
+       let value='';
+       if(type==='s')value=vEl?(shared[Number(vEl.textContent)]||''):'';
+       else if(type==='inlineStr'){const isEl=c.getElementsByTagName('is')[0];value=isEl?[...isEl.getElementsByTagName('t')].map(t=>t.textContent).join(''):'';}
+       else value=vEl?vEl.textContent:'';
+       vals.push([idx,value]);if(idx>maxCol)maxCol=idx;
+     });
+     const arr=new Array(maxCol+1).fill('');vals.forEach(([idx,v])=>{arr[idx]=v;});
+     return arr;
+   }).filter(r=>r.some(v=>v!==''));
+   const width=rows.reduce((m,r)=>Math.max(m,r.length),0);
+   return rows.map(r=>{const a=r.slice();while(a.length<width)a.push('');return a;});
+ }
+ async function xlsxResolveFirstSheetPath(zip){
+   try{
+     const wbXml=await zip.file('xl/workbook.xml').async('string');
+     const relsXml=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+     const wbDoc=new DOMParser().parseFromString(wbXml,'application/xml');
+     const relDoc=new DOMParser().parseFromString(relsXml,'application/xml');
+     const firstSheet=wbDoc.getElementsByTagName('sheet')[0];
+     const rid=firstSheet&&(firstSheet.getAttribute('r:id')||firstSheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id'));
+     const rel=[...relDoc.getElementsByTagName('Relationship')].find(r=>r.getAttribute('Id')===rid);
+     const target=rel&&rel.getAttribute('Target');
+     if(target)return 'xl/'+target.replace(/^\.?\//,'').replace(/^xl\//,'');
+   }catch(e){}
+   const guess=Object.keys(zip.files).filter(p=>/^xl\/worksheets\/sheet\d+\.xml$/i.test(p)).sort();
+   return guess[0]||null;
+ }
+ async function parseXLSXFile(file){
+   const zip=await window.JSZip.loadAsync(file);
+   const sheetPath=await xlsxResolveFirstSheetPath(zip);
+   if(!sheetPath||!zip.file(sheetPath))throw new Error('시트를 찾을 수 없습니다.');
+   const sharedXml=zip.file('xl/sharedStrings.xml')?await zip.file('xl/sharedStrings.xml').async('string'):'';
+   const shared=xlsxParseSharedStrings(sharedXml);
+   const sheetXml=await zip.file(sheetPath).async('string');
+   const rows=xlsxParseSheetRows(sheetXml,shared);
+   if(rows.length<2)throw new Error('헤더와 1명 이상의 응답이 포함된 Excel 파일이 필요합니다.');
+   return {headers:rows[0],rows:rows.slice(1)};
+ }
  async function inspectUpload(file){
    const ext=file.name.split('.').pop().toLowerCase();
    if(!['csv','xlsx','xls'].includes(ext))throw new Error('Excel(.xlsx, .xls) 또는 CSV(.csv) 파일을 선택해주세요.');
@@ -552,7 +602,15 @@ window.DemoData = {
      const parsed=parseCSV(await file.text());
      return {format:'CSV',count:parsed.rows.length,columns:parsed.headers.length,headers:parsed.headers,preview:parsed.rows.slice(0,3),parsed,source:'CSV에서 직접 확인',needsExcelParser:false};
    }
-   return {format:ext.toUpperCase(),count:null,columns:null,headers:[],preview:[],source:'Excel 구조 연결 예정',needsExcelParser:true};
+   if(ext==='xlsx'){
+     try{
+       const parsed=await parseXLSXFile(file);
+       return {format:'XLSX',count:parsed.rows.length,columns:parsed.headers.length,headers:parsed.headers,preview:parsed.rows.slice(0,3),parsed,source:'Excel 시트에서 직접 확인',needsExcelParser:false};
+     }catch(e){
+       return {format:'XLSX',count:null,columns:null,headers:[],preview:[],source:'Excel 구조를 읽지 못해 담당자 입력으로 대체합니다',needsExcelParser:true};
+     }
+   }
+   return {format:ext.toUpperCase(),count:null,columns:null,headers:[],preview:[],source:'구버전 .xls 형식은 구조 연결 예정',needsExcelParser:true};
  }
  async function analyzeEvaluation(input){
    // 실제 연결 시 input.file 및 확인된 매핑을 서버에 전달하고 표준 결과 객체를 반환합니다.
@@ -564,7 +622,7 @@ window.DemoData = {
    const csv='\uFEFF'+rows.map(row=>row.map(v=>{let text=String(v??'');if(/^[=+@-]/.test(text)&&typeof v!=='number')text="'"+text;return '"'+text.replace(/"/g,'""')+'"';}).join(',')).join('\r\n');
    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
- window.PlatformServices={convertScore,parseCSV,inspectUpload,analyzeEvaluation,downloadCSV};
+ window.PlatformServices={convertScore,parseCSV,inspectUpload,analyzeEvaluation,downloadCSV,parseXLSXFile};
 })();
 
 </script>
@@ -604,13 +662,89 @@ window.DemoData = {
    const avgScore=Number((avgRaw/record.scaleMax*5).toFixed(2));
    return {itemKeys:[...config.itemKeys],thresholds:{...config.thresholds},itemScores:items.map(s=>[s[0],s[2]]),avgScore,band:fraudBand(avgScore,config.thresholds),computedAt:new Date().toISOString()};
  }
+ /* ===== 서술형 응답 매칭·분석 (Narrative response matching & analysis) =====
+  * 응답 Excel/CSV의 열 제목을 평가 항목 관리에 등록된 질문과 매칭하여, 점수형 문항은
+  * 응답 평균을 자동 계산하고 서술형 문항은 실제 응답 텍스트를 추출해 키워드 빈도 기반으로
+  * 요약합니다. AI 요약은 항상 추출된 실제 응답에서만 키워드·문장을 가져오며, 원본에 없는
+  * 의견을 새로 만들어내지 않습니다.
+  * ============================================================================= */
+ function normalizeQuestionText(q){return String(q||'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,'').trim();}
+ function matchHeadersToTemplate(kind,headers){
+   const rows=templateRows(kind);
+   const normHeaders=headers.map(h=>normalizeQuestionText(h));
+   return rows.map(r=>{
+     const normQ=normalizeQuestionText(r.question);
+     let idx=normQ?normHeaders.findIndex(h=>h&&h===normQ):-1;
+     if(idx<0&&normQ.length>=4)idx=normHeaders.findIndex(h=>h&&h.length>=4&&(h.includes(normQ)||normQ.includes(h)));
+     return {row:r,colIndex:idx};
+   }).filter(m=>m.colIndex>=0);
+ }
+ function averageColumn(rows,colIndex){
+   const vals=rows.map(r=>Number(String(r[colIndex]??'').trim())).filter(v=>Number.isFinite(v));
+   if(!vals.length)return null;
+   return vals.reduce((a,b)=>a+b,0)/vals.length;
+ }
+ const NARRATIVE_STOPWORDS=new Set(['그리고','그러나','하지만','너무','정말','매우','조금','더','또','것','수','등','때','제가','저는','저희','합니다','했습니다','있습니다','됩니다','되었습니다','같습니다','입니다','해서','에서','으로','로써','부터','까지','에게','한테','이나','거나','또는','대해','대한','관련','통해','위해','때문에','있는','없는','같은','대해서','정도','이번','저희는']);
+ function tokenizeNarrative(text){return String(text||'').replace(/[.,!?~^()\[\]{}"'…·:;\/\\\-]+/g,' ').split(/\s+/).map(t=>t.trim()).filter(t=>t.length>=2&&!NARRATIVE_STOPWORDS.has(t));}
+ function keywordFrequency(responses,topN=10){
+   const freq=new Map(),byIndex=new Map();
+   responses.forEach((text,i)=>{[...new Set(tokenizeNarrative(text))].forEach(t=>{freq.set(t,(freq.get(t)||0)+1);if(!byIndex.has(t))byIndex.set(t,[]);byIndex.get(t).push(i);});});
+   return [...freq.entries()].sort((a,b)=>b[1]-a[1]).slice(0,topN).map(([word,count])=>({word,count,indices:byIndex.get(word)}));
+ }
+ function extractNarrativeColumn(rows,colIndex){
+   const all=rows.map(r=>String(r[colIndex]??'').trim());
+   const responses=all.map((text,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text})).filter(r=>r.text);
+   return {responses,totalCount:rows.length,filledCount:responses.length,emptyCount:rows.length-responses.length};
+ }
+ function buildNarrativeItem(templateRow,colIndex,rows){
+   const {responses,totalCount,filledCount,emptyCount}=extractNarrativeColumn(rows,colIndex);
+   const kws=keywordFrequency(responses.map(r=>r.text),10);
+   const topWords=kws.slice(0,3).map(k=>k.word);
+   const summary=filledCount?`전체 ${totalCount}건 중 ${filledCount}건이 응답했습니다.${topWords.length?` 주요 키워드는 '${topWords.join("', '")}' 등이 확인되었습니다.`:' 반복적으로 나타나는 키워드는 확인되지 않았습니다.'}`:'등록된 응답이 없어 분석할 수 없습니다.';
+   const repeatedOpinions=kws.filter(k=>k.count>=2).slice(0,5).map(k=>({keyword:k.word,count:k.count,sample:responses[k.indices[0]]?.text||''}));
+   return {category:templateRow.category,question:templateRow.question,totalCount,filledCount,emptyCount,keywords:kws.map(k=>({word:k.word,count:k.count})),summary,repeatedOpinions,responses};
+ }
+ const NARRATIVE_POS_WORDS=['좋','만족','도움','유익','친절','전문','우수','추천','향상','성장','충분','재미'];
+ const NARRATIVE_NEG_WORDS=['불편','부족','아쉽','어렵','힘들','느리','부적절','개선','미흡','불만','문제','열악'];
+ function classifyNarrativeSentiment(text){let pos=0,neg=0;NARRATIVE_POS_WORDS.forEach(w=>{if(text.includes(w))pos++;});NARRATIVE_NEG_WORDS.forEach(w=>{if(text.includes(w))neg++;});if(pos>neg)return '긍정';if(neg>pos)return '부정';return '중립';}
+ function buildNarrativeAnalysis(matchedNarrativeCols,rows){
+   if(!matchedNarrativeCols.length)return null;
+   const narrativeItems=matchedNarrativeCols.map(m=>buildNarrativeItem(m.row,m.colIndex,rows));
+   const respondents=rows.map((r,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text:matchedNarrativeCols.map(m=>String(r[m.colIndex]??'').trim()).filter(Boolean).join(' ')})).filter(p=>p.text);
+   if(!respondents.length)return {narrativeItems,adapter:null};
+   const kws=keywordFrequency(respondents.map(p=>p.text),10);
+   const keyOf=w=>'kw-'+w;
+   const sentimentOf=new Map(respondents.map(p=>[p.id,classifyNarrativeSentiment(p.text)]));
+   const keywords=kws.map(k=>[k.word,k.count,`'${k.word}' 관련 서술형 의견`,k.count,keyOf(k.word)]);
+   const opinions={general:respondents.map(p=>[p.id,p.text])};
+   kws.forEach(k=>{opinions[keyOf(k.word)]=respondents.filter(p=>tokenizeNarrative(p.text).includes(k.word)).map(p=>[p.id,p.text]);});
+   const total=respondents.length,bySent={긍정:[],중립:[],부정:[]};
+   respondents.forEach(p=>bySent[sentimentOf.get(p.id)].push(p));
+   const sentiments=['긍정','중립','부정'].map(name=>{
+     const group=bySent[name];
+     const reasons=kws.filter(k=>group.some(p=>tokenizeNarrative(p.text).includes(k.word))).slice(0,5).map(k=>[`'${k.word}' 관련 의견`,keyOf(k.word)]);
+     return {name,count:group.length,ratio:total?Number((group.length/total*100).toFixed(1)):0,tone:name==='긍정'?'blue':name==='중립'?'purple':'orange',reasons:reasons.length?reasons:[['특이 의견 없음','general']]};
+   });
+   const participants=respondents.map(p=>{
+     const sentiment=sentimentOf.get(p.id),myTokens=tokenizeNarrative(p.text);
+     const topMatch=kws.find(k=>myTokens.includes(k.word));
+     const key=topMatch?keyOf(topMatch.word):'general';
+     return [p.id,sentiment,topMatch?`'${topMatch.word}' 관련`:'서술형 응답',key,p.text,sentiment==='부정'?'즉시 확인 권장':sentiment==='중립'?'확인 필요':'일반'];
+   });
+   const negKeywords=kws.filter(k=>{const grp=respondents.filter(p=>tokenizeNarrative(p.text).includes(k.word));const negCount=grp.filter(p=>sentimentOf.get(p.id)==='부정').length;return grp.length&&negCount>=Math.max(1,Math.ceil(grp.length*0.4));});
+   const improvements=(negKeywords.length?negKeywords:kws.slice(0,3)).slice(0,5).map((k,i)=>({title:`'${k.word}' 관련 의견 개선`,why:`서술형 응답 중 '${k.word}' 관련 의견이 ${k.count}건 확인되었습니다.`,tags:[k.word],area:'서술형 응답',keys:[keyOf(k.word)],priority:i<2?'높음':'보통',action:`'${k.word}' 관련 응답 내용을 검토하고 개선 여부를 확인하세요.`}));
+   const issues=kws.slice(0,4).map(k=>{const grp=respondents.filter(p=>tokenizeNarrative(p.text).includes(k.word));const negRatio=grp.length?grp.filter(p=>sentimentOf.get(p.id)==='부정').length/grp.length:0;return {key:keyOf(k.word),title:`'${k.word}' 관련 의견`,polarity:negRatio>0.4?'negative':'positive',count:grp.length,summary:`'${k.word}' 관련 서술형 의견`,evidence:grp.map(p=>[p.id,p.text])};});
+   const duplicates=(()=>{const seen=new Map();respondents.forEach(p=>{const norm=p.text.replace(/\s+/g,'');if(norm.length<2)return;if(!seen.has(norm))seen.set(norm,[]);seen.get(norm).push(p.id);});return [...seen.entries()].filter(([,ids])=>ids.length>1).map(([text,ids])=>({text,ids}));})();
+   const suspiciouslyShort=respondents.filter(p=>p.text.replace(/\s+/g,'').length<=2).map(p=>p.id);
+   return {narrativeItems,adapter:{keywords,opinions,sentiments,participants,improvements,issues,fraudSuspicion:{duplicates,suspiciouslyShort}}};
+ }
  const title=()=>{if(state.route==='company-manage')return bizLabels(state.filters.businessId).company+' 관리';if(state.route==='course-manage')return bizLabels(state.filters.businessId).course+' 관리';return D.navigation.find(n=>n[1]===state.route)?.[2]||'대시보드';};
  const sampleNotice=()=>`<div class="notice">ⓘ <span><strong>분석 결과</strong></span></div>`;
  function heading(name,description,action=''){return `<div class="page-heading"><div><h1>${name}</h1><p>${description}</p></div>${action}</div>`;}
  function navAllowed(entry){return !entry[4]||entry[4].includes(state.currentUser?.role);}
  function navigate(route){const entry=D.navigation.find(n=>n[1]===route);if(!entry||!navAllowed(entry))route='dashboard';if(state.route!==route){state.tab='overview';state.search='';state.planResult=false;}state.route=route;if(route==='plan'&&state.planMode!=='course'&&state.planMode!=='edit')state.planMode='list';if(route==='catalog'){state.filters.courseId='';state.filters.cohortId='';}if(location.hash!==`#${route}`)location.hash=route;render();$('sidebar').classList.remove('open');$('mobileShade').classList.remove('show');}
  function renderNav(){const gb=$('globalBusiness');if(gb){const bs=state.currentUser?accessibleBusinesses(state.currentUser):[];gb.innerHTML=bs.map(b=>`<option value="${b.id}" ${b.id===state.filters.businessId?'selected':''}>${esc(b.name)}</option>`).join('');} const bl=bizLabels(state.filters.businessId);const navLabel=(route,label)=>route==='company-manage'?bl.company+' 관리':route==='course-manage'?bl.course+' 관리':label;$('nav').innerHTML=D.navigation.filter(navAllowed).map(([group,route,label,i])=>`${group?`<div class="nav-group">${group}</div>`:''}<a class="nav-item ${route===state.route?'active':''}" href="#${route}" ${route===state.route?'aria-current="page"':''}>${icon(i)}${esc(navLabel(route,label))}</a>`).join('');$('crumb').textContent=title();}
- function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':finalTemplateManagement,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
+ function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':evalTemplateManagement,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
    renderDrawer();
    if((state.route==='final'||state.route==='interim')&&state.selected)bindCalculator();}
  function renderDrawer(){
@@ -772,8 +906,8 @@ window.DemoData = {
    const type=e.type;
    return top+sampleNotice()+`<section class="card card-pad section"><div class="card-head"><div><h2>${esc(e.round)} · ${type} 분석 결과</h2><p>${esc(e.business)} › ${esc(e.company)} › ${esc(e.course)}</p></div>${badge(type,type==='최종평가'?'blue':'purple')}</div><div class="context-metadata"><span>응답자 <b>${e.count}명</b></span><span>평가척도 <b id="overviewScale">${esc(currentScale())}</b>점</span><span>분석일 <b>${e.date}</b></span>${badge(e.status,'green')}</div></section>`+
    (type==='중간평가'?fraudMonitoringSection(e):'')+
-   `<div class="tabs" id="analysisTabs" role="tablist" aria-label="분석 결과 영역">${[['overview','종합 분석'],['keywords','키워드 TOP 10'],['opinions','의견 분석'],['actions','개선방안'],['participants','참여자별 피드백']].map(([id,text])=>`<button class="tab ${state.tab===id?'active':''}" role="tab" aria-selected="${state.tab===id}" data-action="analysis-tab" data-tab="${id}">${text}</button>`).join('')}</div>`+
-   (state.tab==='overview'?overviewContent(type)+midFinalPanel(type)+previousCohortPanel():state.tab==='keywords'?keywordsContent():state.tab==='opinions'?opinionContent():state.tab==='participants'?participantsEmbedded():recommendationCards())+
+   `<div class="tabs" id="analysisTabs" role="tablist" aria-label="분석 결과 영역">${[['overview','종합 분석'],['keywords','키워드 TOP 10'],['opinions','의견 분석'],['actions','개선방안'],['participants','참여자별 피드백'],...(e.analysis.narrativeItems?.length?[['narrative','서술형 분석']]:[])].map(([id,text])=>`<button class="tab ${state.tab===id?'active':''}" role="tab" aria-selected="${state.tab===id}" data-action="analysis-tab" data-tab="${id}">${text}</button>`).join('')}</div>`+
+   (state.tab==='overview'?overviewContent(type)+midFinalPanel(type)+previousCohortPanel():state.tab==='keywords'?keywordsContent():state.tab==='opinions'?opinionContent():state.tab==='participants'?participantsEmbedded():state.tab==='narrative'?narrativeAnalysisContent(e):recommendationCards())+
    (type==='중간평가'?`<section class="card download-strip"><div><h3>기업 공유용 결과보고서</h3><p>중간평가 핵심 결과와 교육 중 개선 권고사항을 A4 1페이지로 정리합니다.</p></div><div class="actions">${button('기업 공유용 결과보고서 PDF','company-report','primary')}</div></section>`:`<section class="card download-strip"><div><h3>결과 다운로드</h3><p>최종만족도평가 성과평가용 점수표</p></div><div class="actions">${button('↓ 성과평가용 점수표','download-scores','primary')}</div></section>`);
  }
  function operatingStatus(score){
@@ -807,7 +941,7 @@ window.DemoData = {
    const converted=convertedVals.length?convertedVals.reduce((a,b)=>a+b,0)/convertedVals.length:S.convertScore(rawAvg,max);
    const st=operatingStatus(converted);
    const scoreSummary=`<div class="score-layout"><section class="card card-pad"><div class="inline-title"><h2>${type==='중간평가'?'중간평가':'최종평가'} 평균점수</h2></div><div class="score-main"><div><span class="field-note">원점수 평균</span><div class="raw-score">${rawAvg.toFixed(2)} <small>/ ${esc(max)}</small></div></div><span class="arrow">→</span><div><span class="field-note">10점 환산 평균</span><div><strong>${converted.toFixed(2)}</strong><small> / 10</small></div></div></div><hr class="rule"><p class="field-note">점수형 평가항목의 평균입니다. 선택형 문항은 평균 계산에서 제외됩니다.</p></section><section class="card card-pad"><div class="card-head" style="padding:0 0 14px"><div><h2>평가척도 및 점수 환산</h2><p>원 평가척도는 등록된 평가 기준을 그대로 표시하며, 10점 기준으로 자동 환산합니다.</p></div>${badge(st[0],st[1])}</div><div class="scale-control"><div class="field"><span class="label">원 평가척도</span><input value="${esc(max)}점 만점" readonly></div><div class="field"><span class="label">10점 환산 기준</span><input value="10점 만점" readonly></div><div class="field"><span class="label">10점 환산 평균</span><input value="${converted.toFixed(2)} / 10" readonly></div></div><div class="criteria-box" style="margin-top:16px"><strong style="font-size:12px">점수 판정 기준</strong><div class="criteria-line"><span>9.0점 이상</span><b class="criteria-status green">우수</b></div><div class="criteria-line"><span>7.9 ~ 8.9점</span><b class="criteria-status blue">보통</b></div><div class="criteria-line"><span>7.9점 미만</span><b class="criteria-status red">개선 필요</b></div></div></section></div>`;
-   return scoreSummary+`<section class="card section"><div class="card-head"><div><h2>평가항목별 점수</h2><p>열 제목을 클릭해 정렬할 수 있습니다.</p></div><span class="field-note">10점 환산 기준으로 자동 판정</span></div><div id="scoreTable">${scoreTable()}</div></section>`+(type==='중간평가'?midDiagnosis()+finalForecast():'');
+   return scoreSummary+`<section class="card section"><div class="card-head"><div><h2>평가항목별 점수</h2><p>열 제목을 클릭해 정렬할 수 있습니다.</p></div><span class="field-note">10점 환산 기준으로 자동 판정</span></div><div id="scoreTable">${scoreTable()}</div></section>`+(type==='중간평가'?(A().realNarrative?'':midDiagnosis())+finalForecast():'');
  }
  function scoreTable(){
    const defaultMax=Number(currentScale());let rows=reportScores().map(r=>{const rowMax=Number(r[3]||defaultMax);let converted=null;try{converted=S.convertScore(Number(r[2]),rowMax);}catch{}const st=operatingStatus(converted);return [r[0],r[1],Number(r[2]),rowMax,converted,st[0],st[1]];});
@@ -815,6 +949,15 @@ window.DemoData = {
    return `<div class="table-wrap"><table><thead><tr>${['평가영역','평가내용','원점수','원점수 만점',`${D.config.targetScale}점 환산`,'상태'].map((t,i)=>`<th aria-sort="${state.sortKey===i?(state.sortAsc?'ascending':'descending'):'none'}"><button class="sort-button" data-action="sort-score" data-key="${i}">${t} ${state.sortKey===i?(state.sortAsc?'↑':'↓'):'↕'}</button></th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="num">${Number(r[2]).toFixed(2)}</td><td class="num muted">${esc(r[3])}</td><td class="num blue"><strong>${r[4]==null?'—':r[4].toFixed(2)}</strong></td><td>${badge(r[5],r[6])}</td></tr>`).join('')}</tbody></table></div>`;
  }
  function bindCalculator(){return;}
+ function narrativeAnalysisContent(e){
+   const items=e.analysis.narrativeItems||[];
+   if(!items.length)return `<section class="card card-pad empty">등록된 서술형 문항 응답이 없습니다.</section>`;
+   return `<div class="notice">ⓘ <span>업로드한 Excel/CSV에서 실제로 추출한 서술형 응답을 기준으로 AI가 요약합니다. 원본에 없는 의견은 만들어내지 않습니다.</span></div>`+items.map((it,i)=>`<section class="card card-pad section"><div class="card-head"><div><h2>${esc(it.category)}</h2><p>${esc(it.question)}</p></div>${badge('서술형','green')}</div><div class="context-metadata" style="margin-bottom:10px"><span>전체 응답 <b>${it.totalCount}건</b></span><span>응답 <b>${it.filledCount}건</b></span><span>미응답 <b>${it.emptyCount}건</b></span></div><p class="summary-text">${esc(it.summary)}</p>${it.repeatedOpinions.length?`<h3 style="margin:14px 0 8px;font-size:13px">반복적으로 나타난 주요 의견</h3><div class="fraud-config-list">${it.repeatedOpinions.map(r=>`<div class="fraud-item-row"><span>'${esc(r.keyword)}' · ${r.count}건</span><span class="muted">"${esc(r.sample.slice(0,40))}${r.sample.length>40?'…':''}"</span></div>`).join('')}</div>`:''}<div class="actions" style="margin-top:12px">${button('원본 응답 보기 →','view-narrative-responses','subtle small',`data-index="${i}"`)}</div></section>`).join('');
+ }
+ function viewNarrativeResponses(index){
+   const e=selected(),item=e?.analysis?.narrativeItems?.[index];if(!item)return;
+   openModal(`${item.category} · 원본 응답`,`${item.question} · 전체 ${item.totalCount}건 중 ${item.filledCount}건 응답`,item.responses.length?item.responses.map(r=>`<div class="quote"><span class="quote-source">${esc(r.id)}</span>${esc(r.text)}</div>`).join(''):'<p class="empty">등록된 응답이 없습니다.</p>');
+ }
  function keywordsContent(){return `<section class="card section"><div class="card-head"><div><h2>핵심 키워드 TOP 10</h2><p>유사 표현을 의미 주제로 묶은 샘플 · 순위는 빈도순</p></div>${badge('의미 기반 분류 예시','blue')}</div><div class="table-wrap"><table><thead><tr><th>순위</th><th>핵심 키워드</th><th>빈도</th><th>의미 / 사용 맥락</th><th>관련 의견 수</th><th>근거</th></tr></thead><tbody>${A().keywords.map(([t,f,c,n,k],i)=>`<tr class="keyword-row"><td class="num">${String(i+1).padStart(2,'0')}</td><td>${t}</td><td class="num">${f}회<div class="bar"><span style="width:${f/24*100}%"></span></div></td><td class="muted">${c}</td><td>${n}개</td><td>${button('의견 보기 →','evidence','subtle small',`data-keys="${k}" data-title="${t}"`)}</td></tr>`).join('')}</tbody></table></div><div class="table-foot"><span>빈도는 표현의 등장 횟수, 관련 의견 수는 해당 주제를 포함한 의견 수입니다.</span><span>근거 보기에는 대표 샘플 의견을 표시합니다.</span></div></section><div class="notice">ⓘ <span>묶음 예시: ‘인터넷 느림’ + ‘네트워크 속도’ + ‘와이파이 문제’ → <strong>네트워크 환경</strong>. 실제 의미 분류는 AI 연결 후 적용됩니다.</span></div>`;}
  function opinionContent(){return `<div class="notice">ⓘ <span>${esc(selected().round)} ${selected().type} ${selected().count}명 기준의 샘플 분류입니다. 한 응답에 여러 사유가 있을 수 있으며, 아래 근거에는 시연용으로 작성한 대표 의견을 표시합니다.</span></div><div class="sentiment-grid section">${A().sentiments.map(s=>`<section class="card"><div class="sentiment-top"><div>${badge(s.name,s.tone)}<div class="muted" style="font-size:11px;margin-top:5px">전체의 ${s.ratio}%</div></div><strong>${s.count}<small class="muted">명</small></strong></div><div class="card-head"><h3>주요 사유 TOP 5</h3></div>${s.reasons.map(([t,k],i)=>`<button class="reason-button" data-action="sentiment-evidence" data-sentiment="${s.name}" data-key="${k}" data-title="${t}"><span>${i+1}. ${t}</span><span>↗</span></button>`).join('')}</section>`).join('')}</div><section class="card card-pad section"><h2>한 응답 안의 긍정과 개선요구</h2><p class="summary-text" style="margin-top:9px">“수업은 좋았지만 자리마다 컴퓨터 성능이 달라 실습할 때 불편했습니다.”</p><div class="status-stack" style="margin-top:12px">${badge('긍정 · 수업 만족','blue')}${badge('개선요구 · PC 성능','orange')}</div><p class="field-note" style="margin-top:10px">응답자07 · 시연용 합성 의견. 실제 분석에서는 응답 전체와 문장별 맥락을 함께 확인합니다.</p></section>`;}
  function recommendationCards(){return A().improvements.map((r,i)=>`<section class="card recommendation"><div class="recommendation-top"><span class="index">0${i+1}</span><h2>${r.title}</h2>${badge('우선순위 '+r.priority,r.priority==='높음'?'orange':'blue')}</div><p>${r.why}</p><div>${r.tags.map(t=>`<span class="tag">${t}</span>`).join('')}<span class="tag">평가항목 · ${r.area}</span></div><div class="quote"><span class="quote-source">대표 근거 · 분석 데이터 의견</span>${esc(A().opinions[r.keys[0]][0][1])}</div><div class="recommendation-bottom"><span class="field-note">권장 조치: ${r.action}</span>${button('근거 보기 →','evidence','subtle',`data-keys="${r.keys.join(',')}" data-title="${r.title}"`)}</div></section>`).join('');}
@@ -1001,6 +1144,18 @@ window.DemoData = {
  function filteredHistory(){return state.evaluations.filter(e=>(e.course+' '+e.round+' '+e.type).toLowerCase().includes(state.search.toLowerCase())).sort((a,b)=>state.historySort==='course'?a.course.localeCompare(b.course,'ko'):state.historySort==='count'?b.count-a.count:b.date.localeCompare(a.date));}
  function history(){return heading('분석 이력','등록한 평가와 시연용 분석 결과를 다시 확인하세요.')+contextPanel(false)+`<div class="notice">ⓘ <span>등록 정보와 분석 결과는 이 브라우저에 저장됩니다. 원본 파일 자체는 보관하지 않습니다.</span></div><div class="filter-bar"><div class="actions"><input id="historySearch" class="search" placeholder="과정명, 회차 또는 평가구분 검색" aria-label="분석 이력 검색" value="${esc(state.search)}"></div><select id="historySort" aria-label="분석 이력 정렬">${[['newest','최신순'],['course','과정명순'],['count','응답수 많은 순']].map(([v,t])=>`<option value="${v}" ${state.historySort===v?'selected':''}>${t}</option>`).join('')}</select></div><section class="card" id="historyTable">${evalTable(filteredHistory())}</section>`;}
  function toast(text){$('toast').textContent=text;$('toast').classList.add('show');clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3500);}
+ const TEMPLATE_KINDS={
+   interim:{key:'kcci-interim-template-v1',label:'중간평가 항목',evalType:'중간평가',pageKey:'interimTemplate'},
+   final:{key:'kcci-final-template-v2',label:'최종평가 항목',evalType:'최종평가',pageKey:'finalTemplate'}
+ };
+ function defaultInterimTemplateRows(){return [
+   {category:'전반적 만족도',question:'[전반적 만족도] 현재까지 훈련과정에 전반적으로 만족한다.',type:'score',scale:5},
+   {category:'교육내용',question:'[교육내용] 교육내용이 실무에 도움이 되고 있다.',type:'score',scale:5},
+   {category:'교강사',question:'[교강사] 강사가 열의와 전문성을 가지고 강의하고 있다.',type:'score',scale:5},
+   {category:'훈련환경 및 장비',question:'[훈련환경] 학습시설과 실습장비가 적절하다.',type:'score',scale:5},
+   {category:'교육 운영',question:'[교육운영] 진도와 학습 지원이 적절하다.',type:'score',scale:5},
+   {category:'서술형 의견',question:'[서술형] 현재까지 교육에서 좋았던 점이나 개선이 필요한 점을 자유롭게 적어주세요.',type:'narrative'}
+ ];}
  function defaultFinalTemplateRows(){return [
    ['전반적 만족도','[전반적 만족도] 이 훈련과정에 대해 전반적으로 만족한다.'],
    ['훈련과정 실무연계성','[훈련내용] 훈련과정은 기업현장의 실무와 연계되었다.'],
@@ -1023,20 +1178,33 @@ window.DemoData = {
    ['과정성과','[수강가치] 이 훈련과정은 이 정도의 시간과 비용을 투자하여 수강할 가치가 있다.'],
    ['과정성과','[추천여부] 이 훈련과정을 다른 사람에게 추천하고 싶다.']
  ];}
- function normalizeFinalTemplateRow(r,i){
-   if(Array.isArray(r)) return {category:r[0]||'',question:r[1]||'',type:i===19?'choice':'score',scale:7,options:i===19?['추천','비추천']:[]};
-   return {category:r.category||'',question:r.question||'',type:r.type==='choice'?'choice':'score',scale:Number(r.scale)||7,options:Array.isArray(r.options)?r.options:(r.type==='choice'?['추천','비추천']:[])};
+ function normalizeTemplateRow(r,i,defaultChoiceIndex=-1){
+   if(Array.isArray(r)){const isChoice=i===defaultChoiceIndex;return {category:r[0]||'',question:r[1]||'',type:isChoice?'choice':'score',scale:7,options:isChoice?['추천','비추천']:[]};}
+   const type=r.type==='choice'?'choice':r.type==='narrative'?'narrative':'score';
+   return {category:r.category||'',question:r.question||'',type,scale:type==='score'?(Number(r.scale)||7):0,options:type==='choice'?(Array.isArray(r.options)&&r.options.length?r.options:['추천','비추천']):[]};
  }
- function finalTemplateRows(){
-   try{const saved=JSON.parse(localStorage.getItem('kcci-final-template-v2')||'null');if(Array.isArray(saved)&&saved.length)return saved.map(normalizeFinalTemplateRow);}catch(e){}
-   return defaultFinalTemplateRows().map((r,i)=>normalizeFinalTemplateRow(r,i));
+ function templateRows(kind){
+   const cfg=TEMPLATE_KINDS[kind];
+   try{const saved=JSON.parse(localStorage.getItem(cfg.key)||'null');if(Array.isArray(saved)&&saved.length)return saved.map(r=>normalizeTemplateRow(r));}catch(e){}
+   const defaults=kind==='final'?defaultFinalTemplateRows():defaultInterimTemplateRows();
+   return defaults.map((r,i)=>normalizeTemplateRow(r,i,kind==='final'?19:-1));
  }
- function saveFinalTemplateRows(rows){localStorage.setItem('kcci-final-template-v2',JSON.stringify(rows.map(normalizeFinalTemplateRow)));}
- function finalTemplateManagement(){
-   const rows=finalTemplateRows(), pg=pageSlice(rows,'finalTemplate'), pageRows=pg.items, offset=(pg.page-1)*pg.size;
-   return heading('최종평가 항목 관리','최종만족도평가의 평가영역, 질문, 문항 유형과 입력 방식을 설정합니다.',button('항목 등록·편집','edit-final-template','primary'))+
-   `<section class="card card-pad section"><div class="notice">ⓘ <span>여기서 설정한 항목이 <strong>과정평가 → 최종만족도평가 결과 입력</strong> 화면에 자동 적용됩니다.</span></div></section>
-   <section class="card section"><div class="table-wrap"><table><thead><tr><th style="width:64px">번호</th><th style="width:190px">평가영역</th><th>평가내용</th><th style="width:110px">문항 유형</th><th style="width:180px">입력 방식</th></tr></thead><tbody>${pageRows.map((r,i)=>`<tr><td class="num">${offset+i+1}</td><td>${esc(r.category)}</td><td>${esc(r.question)}</td><td>${badge(r.type==='score'?'점수형':'선택형',r.type==='score'?'blue':'purple')}</td><td>${r.type==='score'?`${r.scale}점 척도 → 10점 환산`:`${r.options.map(esc).join(' / ')} 결과값 입력`}</td></tr>`).join('')}</tbody></table></div>${paginationControls('finalTemplate',pg).match(/<div class="pagination"[\s\S]*/)?.[0]||''}</section>`;
+ function saveTemplateRows(kind,rows){localStorage.setItem(TEMPLATE_KINDS[kind].key,JSON.stringify(rows.map(r=>normalizeTemplateRow(r))));}
+ function finalTemplateRows(){return templateRows('final');}
+ function saveFinalTemplateRows(rows){saveTemplateRows('final',rows);}
+ function templateTypeLabel(r){return r.type==='score'?'점수형':r.type==='choice'?'선택형':'서술형';}
+ function templateSettingLabel(r){return r.type==='score'?`${r.scale}점 척도 → 10점 환산`:r.type==='choice'?`${r.options.map(esc).join(' / ')} 결과값 입력`:'응답 텍스트 추출 · AI 의견 분석';}
+ function evalTemplateManagement(){
+   const finalOnly=bizEvalMode(state.filters.businessId)==='final-only';
+   if(finalOnly)state.evalTemplateTab='final';
+   const tab=TEMPLATE_KINDS[state.evalTemplateTab]?state.evalTemplateTab:'interim';
+   const tabs=finalOnly?[['final','최종평가 항목']]:[['interim','중간평가 항목'],['final','최종평가 항목']];
+   const cfg=TEMPLATE_KINDS[tab];
+   const rows=templateRows(tab), pg=pageSlice(rows,cfg.pageKey), pageRows=pg.items, offset=(pg.page-1)*pg.size;
+   return heading('평가 항목 관리','중간평가·최종평가에서 사용할 평가영역, 질문, 문항 유형과 입력 방식을 설정합니다.',button('항목 등록·편집','edit-eval-template','primary'))+
+   (tabs.length>1?`<div class="tabs" role="tablist" aria-label="평가 항목 탭">${tabs.map(([id,text])=>`<button class="tab ${tab===id?'active':''}" role="tab" aria-selected="${tab===id}" data-action="eval-template-tab" data-kind="${id}">${text}</button>`).join('')}</div>`:'')+
+   `<section class="card card-pad section"><div class="notice">ⓘ <span>여기서 설정한 항목이 <strong>${cfg.evalType==='최종평가'?'과정평가 → 최종만족도평가 결과 입력':'평가자료 업로드'}</strong> 화면과 Excel 응답 매칭에 자동 적용됩니다. 서술형 문항은 업로드한 Excel에서 같은 질문의 열을 찾아 응답을 추출하고 AI가 의견을 분석합니다.</span></div></section>
+   <section class="card section"><div class="table-wrap"><table><thead><tr><th style="width:64px">번호</th><th style="width:190px">평가영역</th><th>평가내용</th><th style="width:110px">문항 유형</th><th style="width:220px">입력 방식</th></tr></thead><tbody>${pageRows.map((r,i)=>`<tr><td class="num">${offset+i+1}</td><td>${esc(r.category)}</td><td>${esc(r.question)}</td><td>${badge(templateTypeLabel(r),r.type==='score'?'blue':r.type==='choice'?'purple':'green')}</td><td>${templateSettingLabel(r)}</td></tr>`).join('')}</tbody></table></div>${paginationControls(cfg.pageKey,pg).match(/<div class="pagination"[\s\S]*/)?.[0]||''}</section>`;
  }
  function openFinalEntry(cohortId){
    const path=R.pathFromCohort(cohortId),existing=R.listEvaluations().find(e=>e.cohortId===cohortId&&e.type==='최종평가');
@@ -1045,10 +1213,10 @@ window.DemoData = {
    <div class="notice">ⓘ <span>문항별 입력 방식은 <strong>등록 관리 → 최종평가 항목 관리</strong>에서 설정합니다. 점수형은 자동으로 10점 환산되고, 2개 선택지의 선택형은 첫 번째 선택지 비율만 입력하면 나머지 비율이 자동 계산됩니다.</span></div>
    <div class="image-ai-box" id="finalImageAiBox"><strong id="finalImageAiTitle">화면 캡처 이미지로 자동 입력</strong><p class="mini-note" style="margin:6px 0 12px">HRD-Net 등에서 열람한 평가결과 화면을 캡처해 올리면 항목별 결과 입력란에 점수를 자동으로 채워줍니다. 화면 한 장에 다 들어오지 않으면 여러 장으로 나눠서 올려도 됩니다.</p><label class="upload-zone" id="finalImageDropZone"><span class="upload-icon">↥</span><strong>이미지를 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>PNG, JPG 등 · 여러 장 한 번에 선택하거나 여러 번 나눠 추가할 수 있습니다</small><input id="finalImageAiInput" class="file-input" type="file" accept="image/*" multiple></label><div id="finalImageList" class="final-image-list"></div><div class="actions" style="justify-content:center;margin-top:4px"><button type="button" class="button primary small" id="finalImageAnalyzeBtn" disabled>업로드한 이미지 분석하기</button></div><p class="image-ai-note">⚠ 프로토타입 동작입니다. 실제 서비스에서는 Claude API가 업로드된 이미지 전체를 함께 분석해 항목별 점수를 자동 매칭합니다. 자동 입력 후에도 값은 직접 수정할 수 있습니다.</p></div>
    <div class="template-toolbar"><div><h3>평가항목 · 질문</h3><p class="mini-note">현재 등록된 최종만족도평가 항목입니다.</p></div>${button('평가항목 관리로 이동','go-final-template','subtle small')}</div>
-   <div class="table-wrap final-entry-table"><table><colgroup><col style="width:190px"><col style="width:64px"><col><col style="width:210px"><col style="width:120px"></colgroup><thead><tr><th>평가영역</th><th>번호</th><th>평가내용</th><th>결과 입력</th><th>환산 결과</th></tr></thead><tbody>${(()=>{const spans={};rows.forEach((r,i)=>{if(i===0||rows[i-1].category!==r.category){let n=1;while(i+n<rows.length&&rows[i+n].category===r.category)n++;spans[i]=n;}});return rows.map((r,i)=>`<tr>${spans[i]?`<td rowspan="${spans[i]}" class="final-area">${esc(r.category)}</td>`:''}<td class="final-no">${i+1}</td><td class="final-question">${esc(r.question)}<small style="display:block;margin-top:4px;color:#7b8798">${r.type==='score'?`점수형 · ${r.scale}점 척도`:`선택형 · ${r.options.map(esc).join(' / ')}`}</small></td><td class="final-score">${r.type==='score'?`<input class="final-score-input" data-index="${i}" data-scale="${r.scale}" type="number" min="0" max="${r.scale}" step="0.01" placeholder="평균점수">`:(r.options.length===2?`<div style="display:flex;align-items:center;gap:8px;justify-content:center;white-space:nowrap"><label style="font-size:11px;color:#66758b">${esc(r.options[0])} <input class="final-choice-rate-input" data-index="${i}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:70px;margin-left:3px"></label><span style="font-size:11px;color:#66758b">${esc(r.options[1])} <strong id="finalChoiceComplement-${i}">—</strong></span></div>`:`<div style="display:flex;gap:6px;justify-content:center">${r.options.map((o,j)=>`<label style="font-size:11px;color:#66758b">${esc(o)}<input class="final-choice-input" data-index="${i}" data-option="${j}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:66px;margin-top:3px"></label>`).join('')}</div>`)}</td><td class="final-converted num" id="finalConverted-${i}">—</td></tr>`).join('')})()}</tbody></table></div>
-   <section class="card card-pad" style="margin-top:18px"><h3>서술형 의견</h3><p class="mini-note" style="margin:6px 0 12px">서술형 결과 파일을 별도로 업로드하면 키워드 TOP 10, 긍정·중립·부정 및 주요 사유 5개, 개선방안 5개를 AI가 분석합니다.</p><input id="finalNarrativeFile" type="file" accept=".xlsx,.xls,.csv"></section>
+   <div class="table-wrap final-entry-table"><table><colgroup><col style="width:190px"><col style="width:64px"><col><col style="width:210px"><col style="width:120px"></colgroup><thead><tr><th>평가영역</th><th>번호</th><th>평가내용</th><th>결과 입력</th><th>환산 결과</th></tr></thead><tbody>${(()=>{const spans={};rows.forEach((r,i)=>{if(i===0||rows[i-1].category!==r.category){let n=1;while(i+n<rows.length&&rows[i+n].category===r.category)n++;spans[i]=n;}});return rows.map((r,i)=>`<tr>${spans[i]?`<td rowspan="${spans[i]}" class="final-area">${esc(r.category)}</td>`:''}<td class="final-no">${i+1}</td><td class="final-question">${esc(r.question)}<small style="display:block;margin-top:4px;color:#7b8798">${r.type==='score'?`점수형 · ${r.scale}점 척도`:r.type==='narrative'?'서술형 · 응답 텍스트 추출':`선택형 · ${r.options.map(esc).join(' / ')}`}</small></td><td class="final-score">${r.type==='score'?`<input class="final-score-input" data-index="${i}" data-scale="${r.scale}" type="number" min="0" max="${r.scale}" step="0.01" placeholder="평균점수">`:r.type==='narrative'?`<span class="field-note">아래 서술형 의견 파일 업로드에서 분석</span>`:(r.options.length===2?`<div style="display:flex;align-items:center;gap:8px;justify-content:center;white-space:nowrap"><label style="font-size:11px;color:#66758b">${esc(r.options[0])} <input class="final-choice-rate-input" data-index="${i}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:70px;margin-left:3px"></label><span style="font-size:11px;color:#66758b">${esc(r.options[1])} <strong id="finalChoiceComplement-${i}">—</strong></span></div>`:`<div style="display:flex;gap:6px;justify-content:center">${r.options.map((o,j)=>`<label style="font-size:11px;color:#66758b">${esc(o)}<input class="final-choice-input" data-index="${i}" data-option="${j}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:66px;margin-top:3px"></label>`).join('')}</div>`)}</td><td class="final-converted num" id="finalConverted-${i}">${r.type==='narrative'?'—':'—'}</td></tr>`).join('')})()}</tbody></table></div>
+   <section class="card card-pad" style="margin-top:18px"><h3>서술형 의견</h3><p class="mini-note" style="margin:6px 0 12px">서술형 결과 파일(응답 원본 Excel/CSV)을 업로드하면 등록된 서술형 문항과 열 제목을 매칭하여 실제 응답을 추출하고, 키워드·의견 분석과 개선방안, 참여자별 피드백을 AI가 분석합니다.</p><input id="finalNarrativeFile" type="file" accept=".xlsx,.csv"></section>
    <div class="error" id="finalEntryError" role="alert"></div>`,button('취소','close-modal')+button(existing?'수정 저장':'결과 저장 및 분석','save-final-entry','primary',`data-cohort="${cohortId}"`));
-   const calc=()=>{rows.forEach((r,i)=>{const out=$('finalConverted-'+i);if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`),v=Number(inp?.value);out.textContent=inp&&inp.value!==''&&v>=0&&v<=r.scale?(v/r.scale*10).toFixed(2):'—';}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`),v=Number(inp?.value),comp=$('finalChoiceComplement-'+i);if(inp&&inp.value!==''&&v>=0&&v<=100){out.textContent=`${v.toFixed(1)}%`;if(comp)comp.textContent=`${(100-v).toFixed(1)}%`;}else{out.textContent='—';if(comp)comp.textContent='—';}}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)],vals=ins.map(x=>Number(x.value)||0),total=vals.reduce((a,b)=>a+b,0);out.textContent=ins.length&&ins.every(x=>x.value!=='')&&Math.abs(total-100)<0.01?'100.0%':'—';}});};
+   const calc=()=>{rows.forEach((r,i)=>{if(r.type==='narrative')return;const out=$('finalConverted-'+i);if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`),v=Number(inp?.value);out.textContent=inp&&inp.value!==''&&v>=0&&v<=r.scale?(v/r.scale*10).toFixed(2):'—';}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`),v=Number(inp?.value),comp=$('finalChoiceComplement-'+i);if(inp&&inp.value!==''&&v>=0&&v<=100){out.textContent=`${v.toFixed(1)}%`;if(comp)comp.textContent=`${(100-v).toFixed(1)}%`;}else{out.textContent='—';if(comp)comp.textContent='—';}}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)],vals=ins.map(x=>Number(x.value)||0),total=vals.reduce((a,b)=>a+b,0);out.textContent=ins.length&&ins.every(x=>x.value!=='')&&Math.abs(total-100)<0.01?'100.0%':'—';}});};
    $('modal').classList.add('final-entry-dialog');document.querySelectorAll('.final-score-input,.final-choice-input,.final-choice-rate-input').forEach(x=>x.addEventListener('input',calc));
    let finalImages=[];
    function renderFinalImages(){
@@ -1071,44 +1239,70 @@ window.DemoData = {
    });
    renderFinalImages();
  }
- function editFinalTemplate(){
-   const rows=finalTemplateRows();
-   openModal('최종평가 항목 등록·편집','평가영역, 질문, 문항 유형과 입력 방식을 등록하거나 수정할 수 있습니다.',`<div class="table-wrap template-table"><table><colgroup><col style="width:5%"><col style="width:19%"><col style="width:43%"><col style="width:11%"><col style="width:16%"><col style="width:6%"></colgroup><thead><tr><th>번호</th><th>평가영역</th><th>질문</th><th>문항 유형</th><th>유형 설정</th><th>관리</th></tr></thead><tbody id="finalTemplateBody">${rows.map((r,i)=>finalTemplateEditRow(r,i)).join('')}</tbody></table></div><div style="margin-top:12px">${button('＋ 질문 추가','add-final-template-row','subtle')}</div>`,button('취소','close-modal')+button('양식 저장','save-final-template','primary'));
+ function editEvalTemplate(){editTemplate(TEMPLATE_KINDS[state.evalTemplateTab]?state.evalTemplateTab:'interim');}
+ function editTemplate(kind){
+   const rows=templateRows(kind),cfg=TEMPLATE_KINDS[kind];
+   openModal(`${cfg.label} 등록·편집`,'평가영역, 질문, 문항 유형과 입력 방식을 등록하거나 수정할 수 있습니다.',`<div class="table-wrap template-table"><table><colgroup><col style="width:5%"><col style="width:17%"><col style="width:38%"><col style="width:11%"><col style="width:18%"><col style="width:6%"></colgroup><thead><tr><th>번호</th><th>평가영역</th><th>질문</th><th>문항 유형</th><th>유형 설정</th><th>관리</th></tr></thead><tbody id="evalTemplateBody" data-kind="${kind}">${rows.map((r,i)=>templateEditRow(r,i)).join('')}</tbody></table></div><div style="margin-top:12px">${button('＋ 질문 추가','add-final-template-row','subtle')}</div>`,button('취소','close-modal')+button('양식 저장','save-eval-template','primary'));
    $('modal').classList.add('template-edit-dialog');
  }
- function finalTemplateEditRow(r={category:'',question:'',type:'score',scale:7,options:[]},i=null){r=normalizeFinalTemplateRow(r,i??0);return `<tr><td class="final-template-number num">${i===null?'':i+1}</td><td><input class="final-template-category" type="text" value="${esc(r.category)}" placeholder="평가영역"></td><td><textarea class="final-template-question" rows="2">${esc(r.question)}</textarea></td><td><select class="final-template-type"><option value="score" ${r.type==='score'?'selected':''}>점수형</option><option value="choice" ${r.type==='choice'?'selected':''}>선택형</option></select></td><td><input class="final-template-setting" type="text" value="${r.type==='score'?r.scale:r.options.join(' / ')}" placeholder="7 또는 추천 / 비추천"></td><td>${button('삭제','delete-final-template-row','subtle small')}</td></tr>`;}
- function renumberFinalTemplateRows(){document.querySelectorAll('#finalTemplateBody tr').forEach((tr,i)=>{const n=tr.querySelector('.final-template-number');if(n)n.textContent=i+1;});}
- function saveFinalTemplate(){
-   const trs=[...document.querySelectorAll('#finalTemplateBody tr')];
-   try{const rows=trs.map(tr=>{const category=tr.querySelector('.final-template-category').value.trim(),question=tr.querySelector('.final-template-question').value.trim(),type=tr.querySelector('.final-template-type').value,setting=tr.querySelector('.final-template-setting').value.trim();if(!category||!question)throw new Error('평가영역과 질문을 모두 입력해주세요.');if(type==='score'){const scale=Number(setting);if(!Number.isFinite(scale)||scale<=0)throw new Error('점수형 문항의 척도를 숫자로 입력해주세요.');return {category,question,type,scale,options:[]};}const options=setting.split('/').map(x=>x.trim()).filter(Boolean);if(options.length<2)throw new Error('선택형 문항은 선택지를 2개 이상 입력해주세요. 예: 추천 / 비추천');return {category,question,type,scale:0,options};});if(!rows.length)throw new Error('평가항목을 1개 이상 등록해주세요.');saveFinalTemplateRows(rows);$('modal').close();render();toast('최종평가 항목을 저장했습니다.');}catch(e){toast(e.message);}
+ function templateEditRow(r={category:'',question:'',type:'score',scale:7,options:[]},i=null){
+   r=normalizeTemplateRow(r);
+   const settingField=r.type==='narrative'?`<input class="final-template-setting" type="text" value="" placeholder="—" disabled>`:`<input class="final-template-setting" type="text" value="${r.type==='score'?r.scale:r.options.join(' / ')}" placeholder="7 또는 추천 / 비추천">`;
+   return `<tr><td class="final-template-number num">${i===null?'':i+1}</td><td><input class="final-template-category" type="text" value="${esc(r.category)}" placeholder="평가영역"></td><td><textarea class="final-template-question" rows="2">${esc(r.question)}</textarea></td><td><select class="final-template-type"><option value="score" ${r.type==='score'?'selected':''}>점수형</option><option value="choice" ${r.type==='choice'?'selected':''}>선택형</option><option value="narrative" ${r.type==='narrative'?'selected':''}>서술형</option></select></td><td>${settingField}</td><td>${button('삭제','delete-final-template-row','subtle small')}</td></tr>`;
  }
- function saveFinalEntry(cohortId){
-   const rows=finalTemplateRows(),err=$('finalEntryError'); if(err)err.textContent='';
+ function renumberFinalTemplateRows(){document.querySelectorAll('#evalTemplateBody tr').forEach((tr,i)=>{const n=tr.querySelector('.final-template-number');if(n)n.textContent=i+1;});}
+ function saveEvalTemplate(){
+   const body=$('evalTemplateBody'),kind=body.dataset.kind;
+   const trs=[...body.querySelectorAll('tr')];
+   try{const rows=trs.map(tr=>{const category=tr.querySelector('.final-template-category').value.trim(),question=tr.querySelector('.final-template-question').value.trim(),type=tr.querySelector('.final-template-type').value,setting=tr.querySelector('.final-template-setting').value.trim();if(!category||!question)throw new Error('평가영역과 질문을 모두 입력해주세요.');if(type==='score'){const scale=Number(setting);if(!Number.isFinite(scale)||scale<=0)throw new Error('점수형 문항의 척도를 숫자로 입력해주세요.');return {category,question,type,scale,options:[]};}if(type==='choice'){const options=setting.split('/').map(x=>x.trim()).filter(Boolean);if(options.length<2)throw new Error('선택형 문항은 선택지를 2개 이상 입력해주세요. 예: 추천 / 비추천');return {category,question,type,scale:0,options};}return {category,question,type:'narrative',scale:0,options:[]};});if(!rows.length)throw new Error('평가항목을 1개 이상 등록해주세요.');saveTemplateRows(kind,rows);$('modal').close();render();toast(`${TEMPLATE_KINDS[kind].label}을 저장했습니다.`);}catch(e){toast(e.message);}
+ }
+ async function saveFinalEntry(cohortId,btn){
+   const rows=finalTemplateRows(),err=$('finalEntryError'),originalLabel=btn?.textContent; if(err)err.textContent='';
    try{
-     const results=rows.map((r,i)=>{
+     const results=[];
+     for(let i=0;i<rows.length;i++){
+       const r=rows[i];
+       if(r.type==='narrative')continue;
        if(r.type==='score'){
          const inp=document.querySelector(`.final-score-input[data-index="${i}"]`);
          if(!inp||inp.value==='')throw new Error(`${i+1}번 문항의 점수를 입력해주세요.`);
          const value=Number(inp.value);
          if(!Number.isFinite(value)||value<0||value>r.scale)throw new Error(`${i+1}번 문항은 0~${r.scale}점 사이로 입력해주세요.`);
-         return {category:r.category,question:r.question,type:'score',scale:r.scale,value,converted:value/r.scale*10};
+         results.push({category:r.category,question:r.question,type:'score',scale:r.scale,value,converted:value/r.scale*10});
+         continue;
        }
        if(r.options.length===2){
          const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`);
          if(!inp||inp.value==='')throw new Error(`${i+1}번 문항의 ${r.options[0]} 비율을 입력해주세요.`);
          const rate=Number(inp.value);
          if(!Number.isFinite(rate)||rate<0||rate>100)throw new Error(`${i+1}번 문항의 비율은 0~100% 사이로 입력해주세요.`);
-         return {category:r.category,question:r.question,type:'choice',options:r.options,rates:[rate,100-rate],rate};
+         results.push({category:r.category,question:r.question,type:'choice',options:r.options,rates:[rate,100-rate],rate});
+         continue;
        }
        const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)];
        if(ins.some(x=>x.value===''))throw new Error(`${i+1}번 문항의 선택지별 비율을 모두 입력해주세요.`);
        const rates=ins.map(x=>Number(x.value));
        if(rates.some(v=>!Number.isFinite(v)||v<0||v>100))throw new Error(`${i+1}번 문항의 비율은 0~100% 사이로 입력해주세요.`);
        if(Math.abs(rates.reduce((a,b)=>a+b,0)-100)>0.01)throw new Error(`${i+1}번 문항의 선택지 비율 합계는 100%여야 합니다.`);
-       return {category:r.category,question:r.question,type:'choice',options:r.options,rates,rate:rates[0]};
-     });
+       results.push({category:r.category,question:r.question,type:'choice',options:r.options,rates,rate:rates[0]});
+     }
      const scores=results.filter(r=>r.type==='score');
      if(!scores.length)throw new Error('점수형 문항이 1개 이상 필요합니다.');
+     const narrativeFile=$('finalNarrativeFile')?.files?.[0];
+     let narrativeResult=null;
+     if(narrativeFile){
+       if(btn){btn.disabled=true;btn.textContent='서술형 응답 분석 중…';}
+       const ext=narrativeFile.name.split('.').pop().toLowerCase();
+       let parsed=null;
+       try{
+         if(ext==='csv')parsed=S.parseCSV(await narrativeFile.text());
+         else if(ext==='xlsx')parsed=await S.parseXLSXFile(narrativeFile);
+       }catch(e){parsed=null;}
+       if(!parsed)throw new Error('서술형 결과 파일을 읽을 수 없습니다. CSV 또는 최신 Excel(.xlsx) 파일을 확인해주세요.');
+       const matches=matchHeadersToTemplate('final',parsed.headers).filter(m=>m.row.type==='narrative');
+       if(!matches.length)throw new Error('업로드한 파일에서 서술형 항목과 일치하는 열을 찾지 못했습니다. 열 제목이 등록된 질문과 일치하는지 확인해주세요.');
+       narrativeResult=buildNarrativeAnalysis(matches,parsed.rows);
+     }
      const avg10=scores.reduce((a,r)=>a+r.converted,0)/scores.length;
      const existing=R.listEvaluations().find(e=>e.cohortId===cohortId&&e.type==='최종평가');
      const commonScales=[...new Set(scores.map(r=>Number(r.scale)))];
@@ -1118,13 +1312,16 @@ window.DemoData = {
      const responseCount=existing?.count||10;
      if(existing){
        const analysis=structuredClone(existing.analysis||{});analysis.scores=analysisScores;analysis.finalResults=results;
+       if(narrativeResult){analysis.narrativeItems=narrativeResult.narrativeItems;analysis.realNarrative=!!narrativeResult.adapter;if(narrativeResult.adapter)Object.assign(analysis,narrativeResult.adapter);}
        R.updateEvaluation(existing.id,{scaleMax:originalScale,score:rawAvg,responseCount,analysis});state.selected=existing.id;
      }else{
-       const record={cohortId,type:'최종평가',scaleMax:originalScale,responseCount,date:new Date().toISOString().slice(0,10),status:'분석완료',score:rawAvg,analysis:structuredClone({scores:analysisScores,finalResults:results,keywords:D.keywords,opinions:D.opinions,sentiments:D.sentiments,improvements:D.improvements,participants:D.participants,issues:D.issues}),uploaded:true};
+       const analysis=structuredClone({scores:analysisScores,finalResults:results,keywords:D.keywords,opinions:D.opinions,sentiments:D.sentiments,improvements:D.improvements,participants:D.participants,issues:D.issues});
+       if(narrativeResult){analysis.narrativeItems=narrativeResult.narrativeItems;analysis.realNarrative=!!narrativeResult.adapter;if(narrativeResult.adapter)Object.assign(analysis,narrativeResult.adapter);}
+       const record={cohortId,type:'최종평가',scaleMax:originalScale,responseCount,date:new Date().toISOString().slice(0,10),status:'분석완료',score:rawAvg,analysis,uploaded:true};
        const saved=R.addEvaluation(record);state.selected=saved.id;
      }
      $('modal').close();state.tab='overview';render();toast('최종평가 결과를 저장했습니다.');
-   }catch(e){if(err)err.textContent=e.message;else toast(e.message);}
+   }catch(e){if(err)err.textContent=e.message;else toast(e.message);if(btn){btn.disabled=false;btn.textContent=originalLabel;}}
  }
 
  /* ===== 공용 UI 컴포넌트: 모달 · 드로어 (Shared UI components: modal & drawer) =====
@@ -1179,12 +1376,30 @@ window.DemoData = {
    openModal('데이터 확인','분석 전에 과정과 응답 정보를 확인해주세요.',
    `<div class="steps"><span class="step">✓ 평가 등록</span><span>→</span><span class="step active">② 데이터 확인</span><span>→</span><span class="step">③ 분석 결과 보기</span></div><div class="notice ${info.needsExcelParser?'warning':''}">ⓘ <span>${info.needsExcelParser?'<strong>Excel 내용 자동인식은 연결 예정입니다.</strong> 아래 응답자 수와 자유의견 문항 수는 담당자가 직접 입력합니다. 파일 내용을 읽어 확인한 값이 아닙니다.':'<strong>CSV 구조를 직접 확인했습니다.</strong> 응답 행 수와 열 이름은 파일에서 읽었습니다. 과정·척도·자유의견 문항은 담당자가 확인해주세요.'}</span></div><div class="data-trail">${esc(path.business.name)} › ${esc(path.company.name)} › ${esc(path.course.name)} › ${esc(path.cohort.name)} › ${d.type}</div><div class="review-grid"><dl><dt>과정명</dt><dd>${esc(d.course)}</dd></dl><dl><dt>기수 · 평가구분</dt><dd>${esc(d.round)} · ${d.type}</dd></dl><dl><dt>원 평가척도</dt><dd>${esc(max)}점 만점</dd></dl><dl><dt>확인 방식</dt><dd>${info.needsExcelParser?'담당자 입력':'CSV 행·열 읽기'}</dd></dl></div><div class="form-grid" style="margin-top:18px"><div class="field"><label for="reviewCount">응답자 수 ${info.needsExcelParser?'(직접 확인 후 입력)':'(CSV 데이터 행 수)'}</label><input id="reviewCount" type="number" min="1" step="1" value="${esc(d.count)}" ${info.needsExcelParser?'':'readonly'}></div><div class="field"><label for="reviewText">자유의견 문항 수 (직접 입력)</label><input id="reviewText" type="number" min="0" step="1" value="${esc(d.freeText)}"></div></div>${fileBlock()}${info.preview.length?`<h3 style="margin:20px 0 10px">CSV 미리보기 · 첫 3개 응답</h3><div class="table-wrap"><table><thead><tr>${info.headers.slice(0,5).map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${info.preview.map(row=>`<tr>${row.slice(0,5).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="field-note">전체 ${info.columns}개 컬럼 중 최대 5개 표시. 원문을 수정하지 않습니다.</p>`:''}<div class="error" id="reviewError" role="alert"></div><p class="field-note" style="margin-top:12px">‘분석 시작’을 누르면 등록 정보를 저장하고 분석 결과를 표시합니다.</p>`,button('← 수정','edit-upload')+button('분석 시작','start-analysis','primary'));
  }
+ function applyTemplateMatching(record,parsed){
+   if(!parsed||!parsed.headers||!parsed.rows||!parsed.rows.length)return;
+   const kind=record.type==='중간평가'?'interim':'final';
+   const matches=matchHeadersToTemplate(kind,parsed.headers);
+   const scoreMatches=matches.filter(m=>m.row.type==='score'),narrativeMatches=matches.filter(m=>m.row.type==='narrative');
+   if(scoreMatches.length){
+     const scores=scoreMatches.map(m=>{const avg=averageColumn(parsed.rows,m.colIndex);return avg==null?null:[m.row.category,m.row.question,Number(avg.toFixed(2))];}).filter(Boolean);
+     if(scores.length){record.analysis.scores=scores;record.matchedFromFile=true;}
+   }
+   if(narrativeMatches.length){
+     const result=buildNarrativeAnalysis(narrativeMatches,parsed.rows);
+     if(result){
+       record.analysis.narrativeItems=result.narrativeItems;
+       record.analysis.realNarrative=!!result.adapter;
+       if(result.adapter)Object.assign(record.analysis,result.adapter);
+     }
+   }
+ }
  async function startAnalysis(b){
    const count=Number($('reviewCount').value),text=Number($('reviewText').value);
    if(!Number.isInteger(count)||count<1||!Number.isInteger(text)||text<0||$('reviewText').value===''){$('reviewError').textContent='응답자 수는 1 이상의 정수, 문항 수는 0 이상의 정수로 입력해주세요.';return;}
    state.draft.count=String(count);state.draft.freeText=String(text);b.disabled=true;b.textContent='분석 준비 중…';
    const d=state.draft;
-   try{const record=await S.analyzeEvaluation({...d,count,scale:d.scale==='custom'?d.customScale:d.scale,file:state.file,metadataSource:state.fileInfo.source});if(record.type==='중간평가'){record.fraudMonitoring=computeFraudMonitoring(record,R.snapshot().fraudMonitorConfig);record.fraudAction={status:'미조치',note:'',updatedAt:null};}const saved=R.addEvaluation(record);state.selected=saved.id;const path=R.pathFromCohort(saved.cohortId);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};$('modal').close();state.tab='overview';navigate(record.type==='중간평가'?'interim':'final');toast('평가와 분석 결과를 이 기수 아래에 저장했습니다.');}
+   try{const record=await S.analyzeEvaluation({...d,count,scale:d.scale==='custom'?d.customScale:d.scale,file:state.file,metadataSource:state.fileInfo.source});applyTemplateMatching(record,state.fileInfo.parsed);if(record.type==='중간평가'){record.fraudMonitoring=computeFraudMonitoring(record,R.snapshot().fraudMonitorConfig);record.fraudAction={status:'미조치',note:'',updatedAt:null};}const saved=R.addEvaluation(record);state.selected=saved.id;const path=R.pathFromCohort(saved.cohortId);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};$('modal').close();state.tab='overview';navigate(record.type==='중간평가'?'interim':'final');toast('평가와 분석 결과를 이 기수 아래에 저장했습니다.');}
    catch(e){$('reviewError').textContent=e.message;b.disabled=false;b.textContent='분석 시작';}
  }
  function evidence(keys,title){const items=keys.flatMap(k=>A().opinions[k]||[]);openModal(title,'관련 의견',`<div class="notice">ⓘ <span>주제의 맥락을 보여주는 대표 의견입니다. 표의 전체 빈도와 이 창의 예시 개수는 다릅니다.</span></div>${items.map(([id,t])=>`<div class="quote"><span class="quote-source">${id} · ${esc(selected().round)} · ${selected().type}</span>${esc(t)}</div>`).join('')||'<p class="empty">관련 의견이 없습니다.</p>'}`);}
@@ -1239,6 +1454,7 @@ window.DemoData = {
    <div class="context-metadata" style="margin-bottom:14px"><span>평균점수(5점 환산) <b>${fm.avgScore.toFixed(2)}</b></span><span class="band-badge ${cls}">${label}</span></div>
    <div class="notice">ⓘ <span>대상 항목 ${fm.itemKeys.length}개 · 등록 시점 기준(심각 ≤${fm.thresholds.critical} · 권고 ≤${fm.thresholds.recommend} · 주의 ≤${fm.thresholds.caution})으로 계산되어, 이후 기준을 변경해도 이 평가의 등급은 바뀌지 않습니다.</span></div>
    <h3 style="margin:18px 0 6px;font-size:13px">대상 항목별 점수</h3>${itemsHtml}
+   ${narrativeFraudSuspicionBlock(e)}
    <h3 style="margin:20px 0 8px;font-size:13px">담당자 조치</h3>
    <div class="field"><label for="fraudActionStatus">조치 상태</label><select id="fraudActionStatus">${['미조치','검토중','조치완료'].map(s=>`<option value="${s}" ${action.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
    <div class="field" style="margin-top:12px"><label for="fraudActionNote">확인 내용 메모</label><textarea id="fraudActionNote" placeholder="추가 평가자료 검수 내용을 기록하세요.">${esc(action.note||'')}</textarea></div>
@@ -1246,12 +1462,19 @@ window.DemoData = {
    <div class="actions" style="margin-top:10px">${button('조치 저장','save-fraud-action','primary small',`data-id="${e.id}"`)}</div>
    </section>`;
  }
+ function narrativeFraudSuspicionBlock(e){
+   const fs=e.analysis?.fraudSuspicion;
+   if(!fs||(!fs.duplicates?.length&&!fs.suspiciouslyShort?.length))return '';
+   const dupRows=fs.duplicates.map(d=>`<div class="fraud-item-row"><span>${d.ids.join(', ')}</span><span class="muted">"${esc(d.text.slice(0,40))}${d.text.length>40?'…':''}"</span></div>`).join('');
+   return `<h3 style="margin:20px 0 6px;font-size:13px">서술형 응답 부정훈련 의심 패턴</h3><div class="notice warning">ⓘ <span>서술형 응답 중 동일한 답변을 여러 명이 제출했거나(복사·붙여넣기 의심), 지나치게 짧은 응답(성의 없는 응답 의심)을 감지했습니다. 실제 부정 여부는 담당자가 원본 응답을 확인해 판단해주세요.</span></div>${dupRows?`<div style="margin-top:8px">${dupRows}</div>`:''}${fs.suspiciouslyShort.length?`<p class="field-note" style="margin-top:8px">성의 없는 응답 의심(2자 이하): ${fs.suspiciouslyShort.join(', ')}</p>`:''}`;
+ }
  function saveFraudAction(id){try{R.updateEvaluation(id,{fraudAction:{status:$('fraudActionStatus').value,note:$('fraudActionNote').value,updatedAt:new Date().toISOString()}});render();toast('조치 상태를 저장했습니다.');}catch(e){const el=$('fraudActionError');if(el)el.textContent=e.message;}}
  function openFraudConfigModal(){
    const cfg=R.snapshot().fraudMonitorConfig;
-   const body=`<div class="notice">ⓘ <span>여기서 바꾼 기준은 앞으로 새로 등록되는 중간평가부터 적용됩니다. 이미 등록된 평가의 등급은 유지됩니다.</span></div>
+   const scoreCategoryOptions=[...new Set([...D.scores.map(s=>s[0]),...templateRows('interim').filter(r=>r.type==='score').map(r=>r.category)])];
+   const body=`<div class="notice">ⓘ <span>여기서 바꾼 기준은 앞으로 새로 등록되는 중간평가부터 적용됩니다. 이미 등록된 평가의 등급은 유지됩니다. 중간평가 항목 관리에서 등록한 점수형 항목도 대상으로 선택할 수 있습니다.</span></div>
    <h3 style="margin:18px 0 8px">모니터링 대상 항목</h3>
-   <div class="fraud-config-list">${D.scores.map(s=>`<label><input type="checkbox" name="fraudItem" value="${esc(s[0])}" ${cfg.itemKeys.includes(s[0])?'checked':''}>${esc(s[0])}</label>`).join('')}</div>
+   <div class="fraud-config-list">${scoreCategoryOptions.map(name=>`<label><input type="checkbox" name="fraudItem" value="${esc(name)}" ${cfg.itemKeys.includes(name)?'checked':''}>${esc(name)}</label>`).join('')}</div>
    <h3 style="margin:18px 0 8px">등급 경계값 (5점 만점 기준)</h3>
    <div class="form-grid"><div class="field"><label for="thCritical">심각 이하</label><input id="thCritical" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.critical}"></div><div class="field"><label for="thRecommend">권고 이하</label><input id="thRecommend" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.recommend}"></div><div class="field"><label for="thCaution">주의 이하</label><input id="thCaution" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.caution}"></div></div>
    <div class="error" id="fraudConfigError" role="alert"></div>`;
@@ -1355,7 +1578,7 @@ window.DemoData = {
      ['등록 관리','사업 → 기업 → 과정(기수 포함) 순서로 교육 운영정보를 등록·관리합니다. 사업과 기업은 별도로 등록하고, 같은 기업이 여러 과정을 운영할 수 있어 과정 관리에서 기수까지 함께 관리합니다.'],
      ['훈련과정 목록 (과정평가)','등록된 기수별로 중간평가·최종만족도평가 등록 현황과 점수를 한눈에 보고, "분석하기"로 상세 분석 결과(키워드, 의견, 개선방안 등)를 확인합니다. 중간평가 분석 결과 안에는 부정훈련 모니터링 결과도 함께 표시됩니다.'],
      ['부정훈련 모니터링 (중간평가 분석 결과 내)','중간평가 점수를 기준으로 담당자의 심화 확인이 필요한 기수를 자동으로 분류합니다(심각/권고/주의/양호). 등급 산정 기준은 설정에서 조정할 수 있으며, 조정 이후에는 새로 등록되는 평가부터 적용됩니다.'],
-     ['최종평가 항목 관리','최종만족도평가에서 사용할 평가영역·문항과 입력 방식(점수형/선택형)을 미리 정의합니다.'],
+     ['평가 항목 관리','중간평가·최종평가 탭별로 평가영역·문항과 입력 방식(점수형/선택형/서술형)을 미리 정의합니다. 서술형 문항은 응답 Excel 업로드 시 자동으로 매칭되어 AI가 의견을 분석합니다.'],
      ['최종만족도평가 결과 입력','HRD-Net 등에서 확인한 점수를 항목별로 입력합니다. 화면 캡처 이미지를 올리면 AI가 항목에 맞춰 점수를 자동으로 채워주는 기능(프로토타입)도 제공합니다.'],
      ['계획서 AI 검토','다음 기수의 사업공모 운영계획서를 업로드하면 이전 평가 결과를 근거로 보완이 필요한 부분을 AI가 검토합니다.']
    ];
@@ -1465,7 +1688,7 @@ window.DemoData = {
    if(a==='delete-user'){if(!confirm('이 초대를 취소할까요?'))return;try{R.deleteUser(b.dataset.id);render();toast('초대를 취소했습니다.');}catch(e){toast(e.message);}return;}
    if(a==='logout'){clearSession();location.reload();return;}
    if(a==='plan-list'){state.planMode='list';state.planCourseId='';state.planCohortId='';render();return;}if(a==='plan-course'){state.planCourseId=b.dataset.id||state.planCourseId;state.planMode='course';state.planCohortId='';render();return;}if(a==='plan-edit'){state.planCohortId=b.dataset.id;state.planMode='edit';render();return;}if(a==='save-plan'){const st=planStore(),rec=st[state.planCohortId]||{};if(!rec.text){$('planError').textContent='먼저 운영계획서 파일을 업로드해주세요.';return;}rec.updatedAt=new Date().toISOString();st[state.planCohortId]=rec;savePlanStore(st);$('planError').textContent='';toast('업로드한 운영계획서와 추출 내용을 저장했습니다.');return;}if(a==='review-plan-v2'){const st=planStore(),rec=st[state.planCohortId]||{},text=rec.text||'';if(!text){$('planError').textContent='먼저 운영계획서 파일을 업로드해주세요.';return;}st[state.planCohortId]={...rec,reviewed:true,updatedAt:new Date().toISOString()};savePlanStore(st);state.planText=text;$('planError').textContent='';const path=R.pathFromCohort(state.planCohortId),cs=R.snapshot().cohorts.filter(h=>h.courseId===path.course.id).slice().sort((x,y)=>(x.startDate||'').localeCompare(y.startDate||'')),idx=cs.findIndex(h=>h.id===state.planCohortId),prev=idx>0?cs[idx-1]:null,has=prev?R.listEvaluations().some(e=>e.cohortId===prev.id):false;$('planOutput').innerHTML=planReviewV2(text,has);toast('업로드한 운영계획서 내용을 기준으로 AI 검토 결과를 생성했습니다.');return;}
-   if(a==='add-entity'){openEntity(b.dataset.kind,b.dataset.origin||'catalog');return;}if(a==='close-entity'){$('entityModal').close();return;}if(a==='save-entity'){saveEntity();return;}if(a==='course-detail'){courseDetail(b.dataset.id);return;}if(a==='edit-company-status'){editCompanyStatus(b.dataset.id);return;}if(a==='save-company-status'){saveCompanyStatus(b.dataset.id);return;}if(a==='edit-course'){editCourse(b.dataset.id);return;}if(a==='save-course-edit'){saveCourseEdit(b.dataset.id);return;}if(a==='go-course-cohorts'){goCourseCohorts(b.dataset.id);return;}if(a==='open-cohort-analysis'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';state.analysisDetail=true;navigate('final');return;}if(a==='upload-slot'){uploadForCohort(b.dataset.cohort,b.dataset.type);return;}if(a==='final-entry'){openFinalEntry(b.dataset.cohort);return;}if(a==='edit-final-template'){editFinalTemplate();return;}if(a==='go-final-template'){$('modal').close();navigate('final-template-manage');return;}if(a==='add-final-template-row'){$('finalTemplateBody').insertAdjacentHTML('beforeend',finalTemplateEditRow());renumberFinalTemplateRows();return;}if(a==='delete-final-template-row'){b.closest('tr')?.remove();renumberFinalTemplateRows();return;}if(a==='save-final-template'){saveFinalTemplate();return;}if(a==='save-final-entry'){saveFinalEntry(b.dataset.cohort);return;}if(a==='noop'){return;}if(a==='select-eval'){state.selected=b.dataset.id;const ev=R.getEvaluation(b.dataset.id);if(ev)state.evalTypeTab=ev.type;state.tab='overview';render();return;}if(a==='register-cohort'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';navigate('final');return;}
+   if(a==='add-entity'){openEntity(b.dataset.kind,b.dataset.origin||'catalog');return;}if(a==='close-entity'){$('entityModal').close();return;}if(a==='save-entity'){saveEntity();return;}if(a==='course-detail'){courseDetail(b.dataset.id);return;}if(a==='edit-company-status'){editCompanyStatus(b.dataset.id);return;}if(a==='save-company-status'){saveCompanyStatus(b.dataset.id);return;}if(a==='edit-course'){editCourse(b.dataset.id);return;}if(a==='save-course-edit'){saveCourseEdit(b.dataset.id);return;}if(a==='go-course-cohorts'){goCourseCohorts(b.dataset.id);return;}if(a==='open-cohort-analysis'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';state.analysisDetail=true;navigate('final');return;}if(a==='upload-slot'){uploadForCohort(b.dataset.cohort,b.dataset.type);return;}if(a==='final-entry'){openFinalEntry(b.dataset.cohort);return;}if(a==='edit-eval-template'){editEvalTemplate();return;}if(a==='eval-template-tab'){state.evalTemplateTab=b.dataset.kind;render();return;}if(a==='go-final-template'){state.evalTemplateTab='final';$('modal').close();navigate('final-template-manage');return;}if(a==='add-final-template-row'){$('evalTemplateBody').insertAdjacentHTML('beforeend',templateEditRow());renumberFinalTemplateRows();return;}if(a==='delete-final-template-row'){b.closest('tr')?.remove();renumberFinalTemplateRows();return;}if(a==='save-eval-template'){saveEvalTemplate();return;}if(a==='save-final-entry'){saveFinalEntry(b.dataset.cohort,b);return;}if(a==='noop'){return;}if(a==='select-eval'){state.selected=b.dataset.id;const ev=R.getEvaluation(b.dataset.id);if(ev)state.evalTypeTab=ev.type;state.tab='overview';render();return;}if(a==='register-cohort'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';navigate('final');return;}
    if(a==='new'){navigate('final');toast('기업 → 과정 → 기수를 선택한 뒤 평가자료를 등록해주세요.');}
    else if(a==='close-modal')$('modal').close();
    else if(a==='close-drawer')dismissDrawer();
@@ -1478,6 +1701,7 @@ window.DemoData = {
    else if(a==='period-evidence')periodEvidence(b.dataset.key,b.dataset.title);
    else if(a==='issue-filter'){state.issueFilter=b.dataset.filter;render();}
    else if(a==='participant-detail')participantDetail(b.dataset.id);
+   else if(a==='view-narrative-responses')viewNarrativeResponses(Number(b.dataset.index));
    else if(a==='save-feedback'){try{R.updateEvaluation(selected().id,{feedback:{...selected().feedback,[b.dataset.id]:$('feedbackText').value}});}catch(e){toast(e.message);return;}$('modal').close();$('participantTable').innerHTML=participantTable();toast('담당자 피드백을 이 평가에 저장했습니다.');}
    else if(a==='sort-participants'){state.participantSort=!state.participantSort;$('participantTable').innerHTML=participantTable();}
    else if(a==='remove-file'){state.uploadSeq++;state.file=null;state.fileInfo=null;state.uploadBusy=false;if(state.uploadStep===2)newEvaluation(false);else{$('fileBlock').innerHTML='';$('evaluationFile').value='';document.querySelector('[data-action="confirm-upload"]').disabled=false;}}
@@ -1525,6 +1749,7 @@ window.DemoData = {
  document.addEventListener('change',e=>{const el=e.target.closest('[data-analysis-filter]');if(!el)return;const k=el.dataset.analysisFilter;state.analysisFilters[k]=el.value;state.pagination.analysis.page=1;if(k==='companyId'){state.analysisFilters.courseId='';state.analysisFilters.cohortId='';}if(k==='courseId')state.analysisFilters.cohortId='';render();});
  document.addEventListener('input',e=>{if(e.target.id!=='analysisSearch')return;state.analysisFilters.search=e.target.value;state.pagination.analysis.page=1;const pos=e.target.selectionStart;render();const n=$('analysisSearch');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
  document.addEventListener('change',e=>{const el=e.target.closest('[data-user-filter]');if(!el)return;state.userFilters[el.dataset.userFilter]=el.value;render();});
+ document.addEventListener('change',e=>{if(!e.target.classList.contains('final-template-type'))return;const tr=e.target.closest('tr'),input=tr.querySelector('.final-template-setting');if(e.target.value==='narrative'){input.value='';input.disabled=true;input.placeholder='—';}else{input.disabled=false;input.placeholder=e.target.value==='score'?'7':'추천 / 비추천';}});
  document.addEventListener('input',e=>{if(e.target.id!=='userSearch')return;state.userFilters.search=e.target.value;const pos=e.target.selectionStart;render();const n=$('userSearch');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
 window.addEventListener('hashchange',()=>{if(checkActivationHash())return;if(!state.currentUser)return;if(location.hash==='#main'){$('main').focus();return;}state.issueFilter='전체';navigate(location.hash.slice(1)||'dashboard');});
 
