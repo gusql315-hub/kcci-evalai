@@ -190,6 +190,7 @@ dialog.drawer .modal-body{max-height:calc(100vh - 130px)}
 .login-features strong{display:block;font-size:13px;margin-bottom:2px}
 .login-features small{color:#cfe0fb;font-size:11.5px;line-height:1.5}
 .login-form-panel{padding:44px 40px;display:flex;flex-direction:column;justify-content:center}
+.login-form-panel[hidden]{display:none}
 .login-form-panel h2{font-size:20px;margin-bottom:6px}
 .login-form-panel .muted{margin-bottom:24px}
 @media(max-width:760px){.login-card{grid-template-columns:1fr}.login-brand{padding:34px 28px}.login-form-panel{padding:34px 28px}}
@@ -228,7 +229,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <li><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/></svg></span><div><strong>참여자별 피드백</strong><small>참여자 의견을 분석하여 개인별 피드백 작성을 지원합니다.</small></div></li>
         </ul>
       </div>
-      <div class="login-form-panel">
+      <div class="login-form-panel" id="loginFormPanel">
         <h2>로그인</h2>
         <p class="muted">계정 정보를 입력해 플랫폼에 접속하세요.</p>
         <form id="loginForm" novalidate>
@@ -237,6 +238,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <div class="error" id="loginError" role="alert"></div>
           <button type="submit" class="button primary" style="width:100%;margin-top:18px">로그인</button>
         </form>
+      </div>
+      <div class="login-form-panel" id="activateFormPanel" hidden>
+        <h2>계정 활성화</h2>
+        <p class="muted" id="activateIntro">초대받으신 계정의 이름과 비밀번호를 설정해주세요.</p>
+        <form id="activateForm" novalidate>
+          <div class="field"><label for="activateEmail">이메일</label><input id="activateEmail" disabled></div>
+          <div class="field" style="margin-top:14px"><label for="activateName">이름</label><input id="activateName" placeholder="이름 입력"></div>
+          <div class="field" style="margin-top:14px"><label for="activatePw">비밀번호</label><input id="activatePw" type="password" autocomplete="new-password" placeholder="8자 이상 입력"></div>
+          <div class="field" style="margin-top:14px"><label for="activatePw2">비밀번호 확인</label><input id="activatePw2" type="password" autocomplete="new-password" placeholder="비밀번호 다시 입력"></div>
+          <div class="error" id="activateError" role="alert"></div>
+          <button type="submit" class="button primary" style="width:100%;margin-top:18px" id="activateSubmit">계정 활성화하고 시작하기</button>
+        </form>
+        <p class="field-note" style="margin-top:14px"><a href="#" id="activateBackLink">로그인 화면으로 돌아가기</a></p>
       </div>
     </div>
   </div>
@@ -267,7 +281,7 @@ window.DemoData = {
     ['등록 관리','business-manage','사업 관리','book'],['','company-manage','기업 관리','users'],['','course-manage','과정 관리','book'],['','final-template-manage','최종평가 항목 관리','report'],
     ['과정평가','final','훈련과정 목록','report'],
     ['계획서 AI 검토','plan','사업공모 계획서 검토','bulb'],
-    ['시스템 관리','user-manage','사용자 관리','users',['admin']],
+    ['사용자 관리','user-manage','사용자 관리','users'],
     ['도움말','help','도움말','help']
   ],
   scores:[
@@ -341,10 +355,10 @@ window.DemoData = {
      ['demo-dev-1','cohort-dev-1','최종평가',5,24,'2026-08-21','previous',.84],
      ['demo-dev-2','cohort-dev-2','최종평가',5,26,'2026-09-01','current',.9]
    ];
-   return {schemaVersion:5,
+   return {schemaVersion:6,
      users:[
-       {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:['business-k','business-d'],invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
-       {id:'user-admin-1',name:'시스템 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+       {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:['business-k','business-d'],password:null,inviteToken:null,invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+       {id:'user-admin-1',name:'최고 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],password:null,inviteToken:null,invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
      ],
      businesses:[{id:'business-k',name:'K-뉴딜 아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'}},{id:'business-d',name:'디지털선도기업아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'}}],
      companies:[{id:'company-intel',businessId:'business-k',name:'인텔',status:'참여 중'},{id:'company-b',businessId:'business-k',name:'B기업',status:'종료'},{id:'company-a',businessId:'business-d',name:'A기업',status:'참여 중'}],
@@ -376,7 +390,7 @@ window.DemoData = {
        if(!Array.isArray(d.users)||!d.users.length){
          d.users=[
            {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
-           {id:'user-admin-1',name:'시스템 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+           {id:'user-admin-1',name:'최고 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
          ];
        }
        const defaultOwner=d.users.find(u=>u.role==='manager')?.id||null;
@@ -387,9 +401,13 @@ window.DemoData = {
        (d.businesses||[]).forEach(b=>{if(!b.evalMode)b.evalMode='both';if(!b.labels)b.labels={company:'기업',course:'과정'};});
        d.schemaVersion=5;
      }
+     if(d.schemaVersion===5){
+       (d.users||[]).forEach(u=>{if(u.password===undefined)u.password=null;if(u.inviteToken===undefined)u.inviteToken=null;if(u.name==='시스템 관리자')u.name='최고 관리자';});
+       d.schemaVersion=6;
+     }
    }
    function validate(d){
-     if(d.schemaVersion!==5)throw new Error('지원하지 않는 저장 데이터 버전입니다.');
+     if(d.schemaVersion!==6)throw new Error('지원하지 않는 저장 데이터 버전입니다.');
      if(!Array.isArray(d.users)||new Set(d.users.map(x=>x.id)).size!==d.users.length)throw new Error('사용자 데이터 구조가 올바르지 않습니다.');
      for(const kind of ['businesses','companies','courses','cohorts','evaluations']){
        if(!Array.isArray(d[kind]))throw new Error('저장 데이터 구조가 올바르지 않습니다.');
@@ -429,9 +447,10 @@ window.DemoData = {
    function addEntity(kind,name,parentId,extra={}){return mutate(d=>{const [collection,parent,foreign]=kinds[kind]||[];if(!collection)throw new Error('등록 유형을 확인해주세요.');name=String(name??'').trim();if(!name||name.length>120)throw new Error('이름은 1~120자로 입력해주세요.');if(parent&&!d[parent].some(x=>x.id===parentId))throw new Error('소속 상위 항목을 선택해주세요.');if(d[collection].some(x=>x.name.toLocaleLowerCase()===name.toLocaleLowerCase()&&(!foreign||x[foreign]===parentId)))throw new Error('같은 상위 항목에 이미 등록된 이름입니다.');let extraFields={};if(kind==='company')extraFields={status:'참여 중'};else if(kind==='course')extraFields={status:'운영 중',createdAt:new Date().toISOString().slice(0,10)};else if(kind==='business'){const company=String(extra.labels?.company||'').trim(),course=String(extra.labels?.course||'').trim();if(!company||!course)throw new Error('1차·2차 분류명을 모두 입력해주세요.');extraFields={ownerId:extra.ownerId||null,evalMode:extra.evalMode==='final-only'?'final-only':'both',labels:{company:company.slice(0,20),course:course.slice(0,20)}};}const item={id:uuid(kind),name,...(foreign?{[foreign]:parentId}:{}),...extraFields};d[collection].push(item);return item;});}
    function updateBusiness(id,patch){return mutate(d=>{const item=d.businesses.find(x=>x.id===id);if(!item)throw new Error('사업을 찾을 수 없습니다.');if(patch?.name!==undefined){const name=String(patch.name).trim();if(!name||name.length>120)throw new Error('사업명은 1~120자로 입력해주세요.');if(d.businesses.some(x=>x.id!==id&&x.name.toLocaleLowerCase()===name.toLocaleLowerCase()))throw new Error('이미 등록된 사업명입니다.');item.name=name;}if(patch?.evalMode!==undefined){if(!['both','final-only'].includes(patch.evalMode))throw new Error('평가 운영방식을 확인해주세요.');item.evalMode=patch.evalMode;}if(patch?.labels!==undefined){const company=String(patch.labels.company||'').trim(),course=String(patch.labels.course||'').trim();if(!company||!course)throw new Error('1차·2차 분류명을 모두 입력해주세요.');item.labels={company:company.slice(0,20),course:course.slice(0,20)};}return item;});}
    function deleteBusiness(id){return mutate(d=>{const i=d.businesses.findIndex(x=>x.id===id);if(i<0)throw new Error('사업을 찾을 수 없습니다.');if(d.companies.some(c=>c.businessId===id))throw new Error('사업을 삭제할 수 없습니다.\n해당 사업에 등록된 데이터가 있습니다.\n관련 데이터를 먼저 삭제한 후 다시 시도해주세요.');const [removed]=d.businesses.splice(i,1);d.users.forEach(u=>{u.businessIds=u.businessIds.filter(bid=>bid!==id);});return removed;});}
-   function addUser(input){return mutate(d=>{const email=String(input.email||'').trim().toLowerCase();if(!email||!/^\S+@\S+\.\S+$/.test(email))throw new Error('올바른 이메일 주소를 입력해주세요.');if(d.users.some(u=>u.email.toLowerCase()===email))throw new Error('이미 등록된 이메일입니다.');const name=String(input.name||'').trim();if(!name)throw new Error('이름을 입력해주세요.');const item={id:uuid('user'),name,email,role:input.role==='admin'?'admin':'manager',status:'invited',businessIds:[...(input.businessIds||[])],invitedAt:new Date().toISOString().slice(0,10),joinedAt:null};d.users.push(item);return item;});}
-   function updateUser(id,changes){return mutate(d=>{const u=d.users.find(x=>x.id===id);if(!u)throw new Error('사용자를 찾을 수 없습니다.');for(const key of Object.keys(changes))if(!['status','businessIds','joinedAt'].includes(key))throw new Error('변경할 수 없는 사용자 필드입니다.');if(changes.status&&!['active','invited','disabled'].includes(changes.status))throw new Error('상태 값을 확인해주세요.');Object.assign(u,copy(changes));return u;});}
+   function addUser(input){return mutate(d=>{const email=String(input.email||'').trim().toLowerCase();if(!email||!/^\S+@\S+\.\S+$/.test(email))throw new Error('올바른 이메일 주소를 입력해주세요.');if(d.users.some(u=>u.email.toLowerCase()===email))throw new Error('이미 등록된 이메일입니다.');const name=String(input.name||'').trim();if(!name)throw new Error('이름을 입력해주세요.');const item={id:uuid('user'),name,email,role:input.role==='admin'?'admin':'manager',status:'invited',businessIds:[...(input.businessIds||[])],password:null,inviteToken:uuid('invite'),invitedAt:new Date().toISOString().slice(0,10),joinedAt:null};d.users.push(item);return item;});}
+   function updateUser(id,changes){return mutate(d=>{const u=d.users.find(x=>x.id===id);if(!u)throw new Error('사용자를 찾을 수 없습니다.');for(const key of Object.keys(changes))if(!['status','businessIds','joinedAt','role','name'].includes(key))throw new Error('변경할 수 없는 사용자 필드입니다.');if(changes.status&&!['active','invited','disabled'].includes(changes.status))throw new Error('상태 값을 확인해주세요.');if(changes.role&&!['admin','manager'].includes(changes.role))throw new Error('회원등급을 확인해주세요.');Object.assign(u,copy(changes));return u;});}
    function deleteUser(id){return mutate(d=>{const i=d.users.findIndex(x=>x.id===id);if(i<0)throw new Error('사용자를 찾을 수 없습니다.');if(d.users[i].status!=='invited')throw new Error('초대 중인 사용자만 삭제할 수 있습니다.');const [removed]=d.users.splice(i,1);return removed;});}
+   function activateUser(token,input){return mutate(d=>{const u=d.users.find(x=>x.inviteToken===token&&x.status==='invited');if(!u)throw new Error('유효하지 않거나 이미 사용된 초대 링크입니다.');const name=String(input.name||'').trim();if(!name)throw new Error('이름을 입력해주세요.');const password=String(input.password||'');if(password.length<8)throw new Error('비밀번호는 8자 이상으로 설정해주세요.');u.name=name;u.password=password;u.status='active';u.joinedAt=new Date().toISOString().slice(0,10);u.inviteToken=null;return u;});}
    function updateCourse(id,patch){return mutate(d=>{const item=d.courses.find(x=>x.id===id);if(!item)throw new Error('과정을 찾을 수 없습니다.');const name=String(patch?.name??item.name).trim();if(!name||name.length>120)throw new Error('과정명은 1~120자로 입력해주세요.');if(d.courses.some(x=>x.id!==id&&x.companyId===item.companyId&&x.name.toLocaleLowerCase()===name.toLocaleLowerCase()))throw new Error('같은 기업에 이미 등록된 과정명입니다.');item.name=name;item.description=String(patch?.description??item.description??'').trim().slice(0,500);if(patch?.status){if(!['운영 중','종료'].includes(patch.status))throw new Error('과정 상태를 확인해주세요.');item.status=patch.status;}return item;});}
    function updateCompany(id,patch){return mutate(d=>{const item=d.companies.find(x=>x.id===id);if(!item)throw new Error('기업을 찾을 수 없습니다.');if(patch?.status){if(!['참여 중','종료'].includes(patch.status))throw new Error('기업 상태를 확인해주세요.');item.status=patch.status;}return item;});}
    function addEvaluation(input){return mutate(d=>{if(d.evaluations.some(e=>e.cohortId===input.cohortId&&e.type===input.type))throw new Error('이 기수에는 같은 구분의 평가가 이미 있습니다. 기존 평가를 확인하거나 다른 기수를 선택해주세요.');const item={...copy(input),id:uuid('evaluation'),feedback:{},checks:{},planText:''};d.evaluations.push(item);return item;});}
@@ -442,7 +461,7 @@ window.DemoData = {
    function deleteCohort(id){return mutate(d=>{const i=d.cohorts.findIndex(x=>x.id===id);if(i<0)throw new Error('기수를 찾을 수 없습니다.');const [removed]=d.cohorts.splice(i,1);d.evaluations=d.evaluations.filter(e=>e.cohortId!==id);return removed;});}
    function deleteCourse(id){return mutate(d=>{const i=d.courses.findIndex(x=>x.id===id);if(i<0)throw new Error('과정을 찾을 수 없습니다.');const cohortIds=new Set(d.cohorts.filter(h=>h.courseId===id).map(h=>h.id));const [removed]=d.courses.splice(i,1);d.cohorts=d.cohorts.filter(h=>h.courseId!==id);d.evaluations=d.evaluations.filter(e=>!cohortIds.has(e.cohortId));return removed;});}
    function deleteCompany(id){return mutate(d=>{const i=d.companies.findIndex(x=>x.id===id);if(i<0)throw new Error('기업을 찾을 수 없습니다.');const courseIds=new Set(d.courses.filter(c=>c.companyId===id).map(c=>c.id));const cohortIds=new Set(d.cohorts.filter(h=>courseIds.has(h.courseId)).map(h=>h.id));const [removed]=d.companies.splice(i,1);d.courses=d.courses.filter(c=>c.companyId!==id);d.cohorts=d.cohorts.filter(h=>!courseIds.has(h.courseId));d.evaluations=d.evaluations.filter(e=>!cohortIds.has(e.cohortId));return removed;});}
-   return {key:KEY,get warning(){return warning;},snapshot:()=>copy(data),scope,listEvaluations:()=>data.evaluations.map(evaluationView),getEvaluation:id=>{const e=data.evaluations.find(x=>x.id===id);return e?evaluationView(e):null;},pathFromCohort:id=>copy(pathFromCohort(id)),addEntity,addEvaluation,updateEvaluation,deleteEvaluation,updateCohort,deleteCohort,deleteCourse,deleteCompany,updateCourse,updateCompany,updateBusiness,deleteBusiness,updateFraudConfig,addUser,updateUser,deleteUser};
+   return {key:KEY,get warning(){return warning;},snapshot:()=>copy(data),scope,listEvaluations:()=>data.evaluations.map(evaluationView),getEvaluation:id=>{const e=data.evaluations.find(x=>x.id===id);return e?evaluationView(e):null;},pathFromCohort:id=>copy(pathFromCohort(id)),addEntity,addEvaluation,updateEvaluation,deleteEvaluation,updateCohort,deleteCohort,deleteCourse,deleteCompany,updateCourse,updateCompany,updateBusiness,deleteBusiness,updateFraudConfig,addUser,updateUser,deleteUser,activateUser};
  }
  function browserStorage(){try{return window.localStorage;}catch{return {getItem(){throw new Error('localStorage 접근이 제한되어 있습니다.');},setItem(){throw new Error('localStorage 접근이 제한되어 있습니다.');}};}}
  window.EvaluationRepository={createRepository,key:KEY};
@@ -564,7 +583,9 @@ window.DemoData = {
  function businessIdForCourse(courseId,d=R.snapshot()){const c=d.courses.find(x=>x.id===courseId);const co=d.companies.find(x=>x.id===c?.companyId);return co?.businessId;}
  function bizLabels(businessId,d=R.snapshot()){const b=d.businesses.find(x=>x.id===businessId);return b?.labels||{company:'기업',course:'과정'};}
  function bizEvalMode(businessId,d=R.snapshot()){return d.businesses.find(x=>x.id===businessId)?.evalMode||'both';}
- const state={route:'dashboard',currentUser:null,selected:'',filters:{businessId:'',companyId:'',courseId:'',cohortId:''},compareIds:[],tab:'overview',sortKey:0,sortAsc:true,search:'',participantFilter:'전체',issueFilter:'전체',evalTypeTab:'중간평가',feedback:{},checks:{},file:null,fileInfo:null,draft:{course:'',round:'',type:'중간평가',scale:'5',customScale:'',count:'10',freeText:'4'},uploadStep:1,uploadBusy:false,uploadSeq:0,calculatorRaw:'6.74',calculatorScale:'7',analysisDetail:false,analysisFilters:{search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''},pagination:{business:{page:1,size:20},company:{page:1,size:20},course:{page:1,size:20},cohort:{page:1,size:20},analysis:{page:1,size:20},finalTemplate:{page:1,size:20}},planCourseId:'',planCohortId:'',planMode:'list',drawer:null};
+ function roleLabel(role){return role==='admin'?'최고 관리자':'사업 관리자';}
+ function sharesBusinessWith(user,targetUser){return targetUser.businessIds.some(id=>user.businessIds.includes(id));}
+ const state={route:'dashboard',currentUser:null,selected:'',filters:{businessId:'',companyId:'',courseId:'',cohortId:''},compareIds:[],tab:'overview',sortKey:0,sortAsc:true,search:'',participantFilter:'전체',issueFilter:'전체',evalTypeTab:'중간평가',feedback:{},checks:{},file:null,fileInfo:null,draft:{course:'',round:'',type:'중간평가',scale:'5',customScale:'',count:'10',freeText:'4'},uploadStep:1,uploadBusy:false,uploadSeq:0,calculatorRaw:'6.74',calculatorScale:'7',analysisDetail:false,analysisFilters:{search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''},pagination:{business:{page:1,size:20},company:{page:1,size:20},course:{page:1,size:20},cohort:{page:1,size:20},analysis:{page:1,size:20},finalTemplate:{page:1,size:20}},planCourseId:'',planCohortId:'',planMode:'list',drawer:null,userFilters:{search:'',businessId:'',role:''}};
  const $=id=>document.getElementById(id);
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const badge=(text,tone='')=>`<span class="badge ${tone}">${esc(text)}</span>`;
@@ -1234,41 +1255,89 @@ window.DemoData = {
    R.updateFraudConfig({itemKeys,thresholds:{critical,recommend,caution}});$('modal').close();render();toast('모니터링 기준을 저장했습니다. 새로 등록하는 중간평가부터 적용됩니다.');
  }
  function userManagePage(){
-   const d=R.snapshot();
+   const d=R.snapshot(), me=state.currentUser, isAdmin=me.role==='admin';
+   const myBiz=accessibleBusinesses(me,d);
+   const f=state.userFilters;
    const statusBadge=s=>badge(s==='active'?'활성':s==='invited'?'초대됨':'비활성',s==='active'?'green':s==='invited'?'blue':'');
-   const roleLabel=r=>r==='admin'?'시스템 관리자':'사업 담당자';
-   const rows=d.users.map(u=>{const bizNames=u.businessIds.map(id=>d.businesses.find(b=>b.id===id)?.name).filter(Boolean);return `<tr><td><strong>${esc(u.name)}</strong></td><td>${esc(u.email)}</td><td>${badge(roleLabel(u.role),u.role==='admin'?'purple':'blue')}</td><td>${u.role==='admin'?'<span class="muted">전체 사업</span>':bizNames.length?esc(bizNames.join(', ')):'<span class="muted">담당 사업 없음</span>'}</td><td>${statusBadge(u.status)}</td><td>${u.role==='admin'?'':button('담당 사업','user-access','subtle small',`data-id="${u.id}"`)+' '+(u.status==='invited'?button('초대 취소','delete-user','subtle small danger',`data-id="${u.id}"`):button(u.status==='active'?'비활성화':'활성화','toggle-user-status','subtle small',`data-id="${u.id}" data-status="${u.status==='active'?'disabled':'active'}"`))}</td></tr>`;}).join('');
-   return heading('사용자 관리','플랫폼을 사용할 사업 담당자를 초대하고, 사용자 현황과 담당 사업을 관리합니다.',button('＋ 이메일로 초대','invite-user','primary'))+
-   `<div class="notice">ⓘ <span>이 화면은 프로토타입입니다. "초대"는 실제로 이메일을 발송하지 않으며, 초대된 사용자는 이 브라우저의 데모 계정으로 로그인할 수 없습니다.</span></div>
-   <section class="card"><div class="card-head"><h2>사용자 목록</h2><p>총 ${d.users.length}명</p></div><div class="table-wrap"><table><thead><tr><th>사용자명</th><th>이메일</th><th>권한</th><th>담당 사업</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">등록된 사용자가 없습니다.</td></tr>'}</tbody></table></div></section>`;
+   let list=isAdmin?d.users:d.users.filter(u=>sharesBusinessWith(me,u));
+   list=list.filter(u=>(!f.search||(u.name+' '+u.email).toLowerCase().includes(f.search.toLowerCase()))&&(!f.businessId||u.businessIds.includes(f.businessId))&&(!f.role||u.role===f.role));
+   const bizOptions=(isAdmin?d.businesses:myBiz).map(b=>`<option value="${b.id}" ${f.businessId===b.id?'selected':''}>${esc(b.name)}</option>`).join('');
+   const rows=list.map(u=>{
+     const bizNames=u.businessIds.map(id=>d.businesses.find(b=>b.id===id)?.name).filter(Boolean);
+     const actions=[];
+     if(isAdmin){
+       actions.push(button('회원등급·담당 사업','user-access','subtle small',`data-id="${u.id}"`));
+       if(u.id!==me.id)actions.push(button(u.status==='active'?'비활성화':'활성화','toggle-user-status','subtle small',`data-id="${u.id}" data-status="${u.status==='active'?'disabled':'active'}"`));
+     }else if(u.role==='manager'){
+       actions.push(button('담당 사업','user-access','subtle small',`data-id="${u.id}"`));
+     }
+     if(u.status==='invited')actions.push(button('초대 취소','delete-user','subtle small danger',`data-id="${u.id}"`));
+     return `<tr><td><strong>${esc(u.name)}</strong></td><td>${esc(u.email)}</td><td>${badge(roleLabel(u.role),u.role==='admin'?'purple':'blue')}</td><td>${u.role==='admin'?'<span class="muted">전체 사업</span>':bizNames.length?esc(bizNames.join(', ')):'<span class="muted">담당 사업 없음</span>'}</td><td>${statusBadge(u.status)}</td><td>${actions.join('')}</td></tr>`;
+   }).join('');
+   return heading('사용자 관리',isAdmin?'플랫폼 전체 사용자를 초대하고 회원등급·담당 사업을 관리합니다.':'내가 담당하는 사업에 참여 중인 사용자를 확인하고 새 사업 관리자를 초대할 수 있습니다.',button('＋ 사용자 초대','invite-user','primary'))+
+   `<div class="notice">ⓘ <span>이 화면은 프로토타입입니다. 초대 메일은 실제로 발송되지 않으며, 초대를 등록하면 테스트용 활성화 링크가 대신 표시됩니다.</span></div>
+   <section class="card card-pad section"><div class="analysis-filter-grid" style="grid-template-columns:1.3fr 1fr 1fr">
+     <label class="field"><span class="label">검색</span><input id="userSearch" value="${esc(f.search)}" placeholder="이름 또는 이메일 검색"></label>
+     <label class="field"><span class="label">담당 사업</span><select data-user-filter="businessId"><option value="">전체 사업</option>${bizOptions}</select></label>
+     <label class="field"><span class="label">회원등급</span><select data-user-filter="role"><option value="">전체</option><option value="admin" ${f.role==='admin'?'selected':''}>최고 관리자</option><option value="manager" ${f.role==='manager'?'selected':''}>사업 관리자</option></select></label>
+   </div></section>
+   <section class="card"><div class="card-head"><h2>사용자 목록</h2><p>총 ${list.length}명</p></div><div class="table-wrap"><table><thead><tr><th>이름</th><th>이메일</th><th>회원등급</th><th>담당 사업</th><th>이용 상태</th><th>관리</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">조건에 맞는 사용자가 없습니다.</td></tr>'}</tbody></table></div></section>`;
  }
  function inviteUserContent(){
-   const businesses=R.snapshot().businesses;
-   const body=`<div class="notice">ⓘ <span>실제 초대 메일은 이 프로토타입에서 발송되지 않습니다. 초대 즉시 목록에 "초대됨" 상태로 추가됩니다.</span></div>
+   const me=state.currentUser,isAdmin=me.role==='admin',d=R.snapshot();
+   const bizChoices=isAdmin?d.businesses:accessibleBusinesses(me,d);
+   const roleField=isAdmin?`<div class="field" style="margin:14px 0"><label for="inviteRole">회원등급</label><select id="inviteRole"><option value="manager">사업 관리자</option><option value="admin">최고 관리자</option></select></div>`:`<p class="field-note" style="margin:10px 0">사업 관리자로 초대됩니다.</p>`;
+   const bizNote=isAdmin?'최고 관리자로 초대하면 담당 사업 선택과 관계없이 전체 사업에 접근합니다.':'내가 권한을 가진 사업 중에서만 선택할 수 있습니다.';
+   const body=`<div class="notice">ⓘ <span>실제 초대 메일은 발송되지 않습니다. 초대를 등록하면 테스트용 활성화 링크가 표시됩니다.</span></div>
    <div class="field"><label for="inviteName">이름</label><input id="inviteName" placeholder="담당자 이름"></div>
    <div class="field" style="margin-top:14px"><label for="inviteEmail">이메일</label><input id="inviteEmail" type="email" placeholder="name@company.com"></div>
-   <h3 style="margin:20px 0 8px">담당 사업 (선택, 나중에 변경 가능)</h3>
-   <div class="fraud-config-list">${businesses.map(b=>`<label><input type="checkbox" name="inviteBiz" value="${b.id}">${esc(b.name)}</label>`).join('')||'<span class="muted">등록된 사업이 없습니다.</span>'}</div>
+   ${roleField}
+   <h3 style="margin:18px 0 4px">담당 사업</h3><p class="field-note" style="margin-bottom:8px">${bizNote}</p>
+   <div class="fraud-config-list">${bizChoices.map(b=>`<label><input type="checkbox" name="inviteBiz" value="${b.id}">${esc(b.name)}</label>`).join('')||'<span class="muted">선택할 수 있는 사업이 없습니다.</span>'}</div>
    <div class="error" id="inviteError" role="alert"></div>`;
-   return['이메일로 초대','사업 담당자 계정 초대',body,button('닫기','close-drawer')+button('초대 보내기','save-invite-user','primary'),'sm'];
+   return['사용자 초대','이메일로 신규 계정을 초대합니다',body,button('닫기','close-drawer')+button('초대 보내기','save-invite-user','primary'),'sm'];
  }
  function saveInviteUser(){
+   const me=state.currentUser,isAdmin=me.role==='admin';
    const name=$('inviteName').value,email=$('inviteEmail').value;
-   const businessIds=[...document.querySelectorAll('input[name="inviteBiz"]:checked')].map(i=>i.value);
-   try{R.addUser({name,email,role:'manager',businessIds});state.drawer=null;closeDrawer();render();toast('초대를 등록했습니다. (실제 메일은 발송되지 않습니다)');}
-   catch(e){$('inviteError').textContent=e.message;}
+   const role=isAdmin?($('inviteRole')?.value||'manager'):'manager';
+   let businessIds=[...document.querySelectorAll('input[name="inviteBiz"]:checked')].map(i=>i.value);
+   if(!isAdmin){const myIds=accessibleBusinesses(me).map(b=>b.id);businessIds=businessIds.filter(id=>myIds.includes(id));}
+   if(role==='admin')businessIds=[];
+   try{
+     const user=R.addUser({name,email,role,businessIds});
+     state.drawer=null;closeDrawer();render();
+     const link=`${location.origin}${location.pathname}#activate=${user.inviteToken}`;
+     openModal('초대를 완료했습니다','실제 메일은 발송되지 않습니다. 아래 링크로 테스트해보세요.',`<div class="field"><label for="inviteLinkOut">활성화 링크</label><input id="inviteLinkOut" value="${esc(link)}" readonly onclick="this.select()"></div>`,button('닫기','close-modal'));
+     toast('초대를 등록했습니다.');
+   }catch(e){$('inviteError').textContent=e.message;}
  }
  function userAccessContent(id){
+   const me=state.currentUser,isAdmin=me.role==='admin';
    const d=R.snapshot(),user=d.users.find(u=>u.id===id);
-   if(!user)return['담당 사업 관리','','<p class="empty">사용자를 찾을 수 없습니다.</p>',button('닫기','close-drawer'),'sm'];
-   const body=`<p class="muted" style="margin-bottom:14px">${esc(user.name)}(${esc(user.email)})님이 접근할 수 있는 사업을 선택하세요.</p>
-   <div class="fraud-config-list">${d.businesses.map(b=>`<label><input type="checkbox" name="accessBiz" value="${b.id}" ${user.businessIds.includes(b.id)?'checked':''}>${esc(b.name)}</label>`).join('')||'<span class="muted">등록된 사업이 없습니다.</span>'}</div>
-   <div class="error" id="userAccessError" role="alert"></div>`;
-   return['담당 사업 관리','',body,button('닫기','close-drawer')+button('저장','save-user-access','primary',`data-id="${id}"`),'sm'];
+   if(!user)return['사용자 권한 관리','','<p class="empty">사용자를 찾을 수 없습니다.</p>',button('닫기','close-drawer'),'sm'];
+   const bizChoices=isAdmin?d.businesses:accessibleBusinesses(me,d);
+   const roleField=isAdmin?`<div class="field" style="margin-bottom:16px"><label for="userRoleSelect">회원등급</label><select id="userRoleSelect" ${user.id===me.id?'disabled':''}><option value="manager" ${user.role==='manager'?'selected':''}>사업 관리자</option><option value="admin" ${user.role==='admin'?'selected':''}>최고 관리자</option></select>${user.id===me.id?'<p class="field-note">본인의 회원등급은 변경할 수 없습니다.</p>':''}</div>`:'';
+   const bizSection=user.role==='admin'?'<p class="muted">최고 관리자는 전체 사업에 접근하므로 담당 사업을 별도로 지정하지 않습니다.</p>':`<h3 style="margin:4px 0 8px">담당 사업</h3>${isAdmin?'':'<p class="field-note" style="margin-bottom:8px">내가 권한을 가진 사업만 조정할 수 있습니다.</p>'}<div class="fraud-config-list">${bizChoices.map(b=>`<label><input type="checkbox" name="accessBiz" value="${b.id}" ${user.businessIds.includes(b.id)?'checked':''}>${esc(b.name)}</label>`).join('')||'<span class="muted">선택할 수 있는 사업이 없습니다.</span>'}</div>`;
+   const body=`<p class="muted" style="margin-bottom:14px">${esc(user.name)} (${esc(user.email)})</p>${roleField}<div id="userAccessBizSection">${bizSection}</div><div class="error" id="userAccessError" role="alert"></div>`;
+   return['사용자 권한 관리','',body,button('닫기','close-drawer')+button('저장','save-user-access','primary',`data-id="${id}"`),'sm'];
  }
  function saveUserAccess(id){
-   const businessIds=[...document.querySelectorAll('input[name="accessBiz"]:checked')].map(i=>i.value);
-   try{R.updateUser(id,{businessIds});state.drawer=null;closeDrawer();render();toast('담당 사업을 저장했습니다.');}
+   const me=state.currentUser,isAdmin=me.role==='admin';
+   const target=R.snapshot().users.find(u=>u.id===id);
+   if(!target)return;
+   const changes={};
+   if(isAdmin){
+     const roleSel=$('userRoleSelect');
+     changes.role=(roleSel&&id!==me.id)?roleSel.value:target.role;
+     changes.businessIds=changes.role==='admin'?[]:[...document.querySelectorAll('input[name="accessBiz"]:checked')].map(i=>i.value);
+   }else{
+     const myIds=accessibleBusinesses(me).map(b=>b.id);
+     const checked=[...document.querySelectorAll('input[name="accessBiz"]:checked')].map(i=>i.value);
+     const outsideMyScope=target.businessIds.filter(bid=>!myIds.includes(bid));
+     changes.businessIds=[...new Set([...outsideMyScope,...checked])];
+   }
+   try{R.updateUser(id,changes);state.drawer=null;closeDrawer();render();toast('사용자 정보를 저장했습니다.');}
    catch(e){const el=$('userAccessError');if(el)el.textContent=e.message;}
  }
  function helpPage(){
@@ -1445,13 +1514,14 @@ window.DemoData = {
  document.addEventListener('change',e=>{const ps=e.target.closest('[data-page-size]');if(ps){const k=ps.dataset.pageSize;state.pagination[k].size=Number(ps.value)||20;state.pagination[k].page=1;render();return;}});
  document.addEventListener('change',e=>{const el=e.target.closest('[data-analysis-filter]');if(!el)return;const k=el.dataset.analysisFilter;state.analysisFilters[k]=el.value;state.pagination.analysis.page=1;if(k==='companyId'){state.analysisFilters.courseId='';state.analysisFilters.cohortId='';}if(k==='courseId')state.analysisFilters.cohortId='';render();});
  document.addEventListener('input',e=>{if(e.target.id!=='analysisSearch')return;state.analysisFilters.search=e.target.value;state.pagination.analysis.page=1;const pos=e.target.selectionStart;render();const n=$('analysisSearch');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
-window.addEventListener('hashchange',()=>{if(!state.currentUser)return;if(location.hash==='#main'){$('main').focus();return;}state.issueFilter='전체';navigate(location.hash.slice(1)||'dashboard');});
+ document.addEventListener('change',e=>{const el=e.target.closest('[data-user-filter]');if(!el)return;state.userFilters[el.dataset.userFilter]=el.value;render();});
+ document.addEventListener('input',e=>{if(e.target.id!=='userSearch')return;state.userFilters.search=e.target.value;const pos=e.target.selectionStart;render();const n=$('userSearch');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
+window.addEventListener('hashchange',()=>{if(checkActivationHash())return;if(!state.currentUser)return;if(location.hash==='#main'){$('main').focus();return;}state.issueFilter='전체';navigate(location.hash.slice(1)||'dashboard');});
 
  function applyUserScope(user){
    state.currentUser=user;
-   const roleLabel=user.role==='admin'?'시스템 관리자':'사업 담당자';
    $('userAvatar').textContent=user.name.slice(0,1);
-   $('userInfo').innerHTML=`${esc(user.name)}<small>${roleLabel}</small>`;
+   $('userInfo').innerHTML=`${esc(user.name)}<small>${roleLabel(user.role)}</small>`;
    const allowed=accessibleBusinesses(user);
    if(!allowed.some(b=>b.id===state.filters.businessId))state.filters={businessId:allowed[0]?.id||'',companyId:'',courseId:'',cohortId:''};
  }
@@ -1460,15 +1530,45 @@ window.addEventListener('hashchange',()=>{if(!state.currentUser)return;if(locati
    $('loginScreen').hidden=true;$('appShell').hidden=false;
    navigate(location.hash.slice(1)||'dashboard');
  }
- function showLogin(){
+ function showLogin(msg){
    $('appShell').hidden=true;$('loginScreen').hidden=false;
+   $('loginFormPanel').hidden=false;$('activateFormPanel').hidden=true;
+   if(msg)$('loginError').textContent=msg;
    const idInput=$('loginId');if(idInput)idInput.focus();
  }
+ function showActivate(user){
+   $('appShell').hidden=true;$('loginScreen').hidden=false;
+   $('loginFormPanel').hidden=true;$('activateFormPanel').hidden=false;
+   $('activateEmail').value=user.email;
+   $('activateName').value='';
+   $('activateError').textContent='';
+   $('activateForm').dataset.token=user.inviteToken;
+   $('activateName').focus();
+ }
+ $('activateBackLink').addEventListener('click',e=>{e.preventDefault();window.history.replaceState(null,'',location.pathname+location.search);showLogin();});
+ $('activateForm').addEventListener('submit',e=>{
+   e.preventDefault();
+   const token=e.target.dataset.token;
+   const name=$('activateName').value,pw=$('activatePw').value,pw2=$('activatePw2').value;
+   if(pw!==pw2){$('activateError').textContent='비밀번호가 서로 일치하지 않습니다.';return;}
+   try{
+     const user=R.activateUser(token,{name,password:pw});
+     $('activateError').textContent='';
+     window.history.replaceState(null,'',location.pathname+location.search);
+     setSession(user.id);
+     showApp(findUser(user.id));
+     toast('계정이 활성화되었습니다. 환영합니다!');
+   }catch(err){$('activateError').textContent=err.message;}
+ });
  $('loginForm').addEventListener('submit',e=>{
    e.preventDefault();
    const id=$('loginId').value.trim(),pw=$('loginPw').value;
    const cred=CREDENTIALS[id];
-   const user=cred&&cred.password===pw?findUser(cred.userId):null;
+   let user=cred&&cred.password===pw?findUser(cred.userId):null;
+   if(!user){
+     const byEmail=R.snapshot().users.find(u=>u.email.toLowerCase()===id.toLowerCase()&&u.status!=='invited');
+     if(byEmail&&byEmail.password&&byEmail.password===pw)user=byEmail;
+   }
    if(!user){$('loginError').textContent='아이디 또는 비밀번호를 확인해주세요.';return;}
    if(user.status==='disabled'){$('loginError').textContent='비활성화된 계정입니다. 관리자에게 문의해주세요.';return;}
    $('loginError').textContent='';
@@ -1476,7 +1576,18 @@ window.addEventListener('hashchange',()=>{if(!state.currentUser)return;if(locati
    setSession(user.id);
    showApp(findUser(user.id));
  });
+ function checkActivationHash(){
+   const m=location.hash.match(/^#activate=(.+)$/);
+   if(!m)return false;
+   const token=decodeURIComponent(m[1]);
+   const invited=R.snapshot().users.find(u=>u.inviteToken===token&&u.status==='invited');
+   if(invited){showActivate(invited);return true;}
+   window.history.replaceState(null,'',location.pathname+location.search);
+   showLogin('유효하지 않거나 이미 사용된 초대 링크입니다.');
+   return true;
+ }
  (function boot(){
+   if(checkActivationHash())return;
    const session=getSession();
    const user=session?findUser(session.userId):null;
    if(user&&user.status!=='disabled')showApp(user);else{clearSession();showLogin();}
