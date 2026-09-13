@@ -358,8 +358,8 @@ window.DemoData = {
    ];
    return {schemaVersion:7,
      users:[
-       {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:['business-k','business-d'],password:null,inviteToken:null,invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
-       {id:'user-admin-1',name:'최고 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],password:null,inviteToken:null,invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+       {id:'user-manager-1',name:'김담당',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:['business-k','business-d'],password:null,inviteToken:null,invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+       {id:'user-admin-1',name:'최고 관리자',email:'kcci_admin@korcham.net',role:'admin',status:'active',businessIds:[],password:null,inviteToken:null,invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
      ],
      businesses:[{id:'business-k',name:'K-뉴딜 아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'},fraudMonitoringEnabled:false},{id:'business-d',name:'디지털선도기업아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'},fraudMonitoringEnabled:false}],
      companies:[{id:'company-intel',businessId:'business-k',name:'인텔',status:'참여 중'},{id:'company-b',businessId:'business-k',name:'B기업',status:'종료'},{id:'company-a',businessId:'business-d',name:'A기업',status:'참여 중'}],
@@ -390,8 +390,8 @@ window.DemoData = {
      if(d.schemaVersion===3){
        if(!Array.isArray(d.users)||!d.users.length){
          d.users=[
-           {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
-           {id:'user-admin-1',name:'최고 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+           {id:'user-manager-1',name:'김담당',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+           {id:'user-admin-1',name:'최고 관리자',email:'kcci_admin@korcham.net',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
          ];
        }
        const defaultOwner=d.users.find(u=>u.role==='manager')?.id||null;
@@ -636,7 +636,7 @@ window.DemoData = {
  'use strict';
  const D=window.DemoData,S=window.PlatformServices,R=window.PlatformRepository,H=window.HierarchyUI;
  const AUTH_KEY='kcci-auth-v1';
- const CREDENTIALS={kdteval:{password:'kccidlca2026!',userId:'user-manager-1'},kdteval_admin:{password:'kccidlca2026!',userId:'user-admin-1'}};
+ const CREDENTIALS={'kcci@korcham.net':{password:'kccidlca2026!',userId:'user-manager-1'},'kcci_admin@korcham.net':{password:'kccidlca2026!',userId:'user-admin-1'}};
  function getSession(){try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null');}catch{return null;}}
  function setSession(userId){try{localStorage.setItem(AUTH_KEY,JSON.stringify({userId}));}catch{}}
  function clearSession(){try{localStorage.removeItem(AUTH_KEY);}catch{}}
@@ -1995,7 +1995,7 @@ window.addEventListener('hashchange',()=>{if(checkActivationHash())return;if(!st
  $('loginForm').addEventListener('submit',e=>{
    e.preventDefault();
    const id=$('loginId').value.trim(),pw=$('loginPw').value;
-   const cred=CREDENTIALS[id];
+   const cred=CREDENTIALS[id.toLowerCase()];
    let user=cred&&cred.password===pw?findUser(cred.userId):null;
    if(!user){
      const byEmail=R.snapshot().users.find(u=>u.email.toLowerCase()===id.toLowerCase()&&u.status!=='invited');
