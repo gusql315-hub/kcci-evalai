@@ -163,6 +163,32 @@ dialog.drawer .modal-body{max-height:calc(100vh - 130px)}
 
 /* v8.0: 과정 관리 통합 */
 .score-with-note small{display:block;color:#8a98aa;font-size:10px;margin-top:2px}
+
+/* v9.0: 로그인 화면 */
+.login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0a5fd6,#083f96);z-index:200;align-items:center;justify-content:center;padding:28px;overflow:auto}
+.login-screen:not([hidden]){display:flex}
+.login-card{display:grid;grid-template-columns:1.05fr 1fr;max-width:960px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px #0a2a6640}
+.login-brand{background:linear-gradient(160deg,#0a5fd6,#064aad);color:#fff;padding:44px 40px;display:flex;flex-direction:column;justify-content:center}
+.login-brand-top{display:flex;align-items:center;gap:11px;margin-bottom:28px}
+.login-brand-top .brand-icon{background:rgba(255,255,255,.16)}
+.login-brand-top strong{display:block;font-size:15px}
+.login-brand-top small{display:block;font-size:10px;letter-spacing:1.5px;color:#cfe0fb}
+.login-brand h1{font-size:22px;line-height:1.45;letter-spacing:-.4px;margin-bottom:14px}
+.login-brand>p{color:#d8e6fc;font-size:13px;line-height:1.7;margin-bottom:26px}
+.login-features{list-style:none;display:grid;gap:16px}
+.login-features li{display:flex;gap:12px;align-items:flex-start}
+.login-features .nav-icon{background:rgba(255,255,255,.16);border-radius:8px;width:30px;height:30px;flex-shrink:0}
+.login-features strong{display:block;font-size:13px;margin-bottom:2px}
+.login-features small{color:#cfe0fb;font-size:11.5px;line-height:1.5}
+.login-form-panel{padding:44px 40px;display:flex;flex-direction:column;justify-content:center}
+.login-form-panel h2{font-size:20px;margin-bottom:6px}
+.login-form-panel .muted{margin-bottom:24px}
+.login-demo-hint{margin-top:26px;padding:14px 16px;background:var(--blue-soft);border:1px solid #dfebfa;border-radius:8px;font-size:11.5px;color:#3e659c}
+.login-demo-hint strong{display:block;margin-bottom:5px;color:#2457c5}
+.login-demo-hint p{margin:0 0 8px;line-height:1.6}
+.login-demo-hint ul{margin:0;padding-left:18px;line-height:1.8}
+.login-demo-hint code{background:#fff;border:1px solid #cfe0fb;border-radius:4px;padding:1px 6px;font-size:11px}
+@media(max-width:760px){.login-card{grid-template-columns:1fr}.login-brand{padding:34px 28px}.login-form-panel{padding:34px 28px}}
 </style>
   
 <script>/*!
@@ -181,17 +207,48 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 </head>
 <body>
   <a class="skip" href="#main">본문으로 이동</a>
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-brand-top"><span class="brand-icon">▥</span><div><strong>대한상공회의소</strong><small>교육평가 AI</small></div></div>
+        <h1>강의평가를 AI로 분석하고,<br>교육과정 개선까지 한 번에</h1>
+        <p>강의평가 데이터를 업로드하면 AI가 자동으로 분석하고, 교육과정 개선 방향과 참여자별 피드백까지 정리해주는 업무용 플랫폼입니다.</p>
+        <ul class="login-features">
+          <li><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5"/></svg></span><div><strong>AI 강의평가 분석</strong><small>중간·최종만족도평가 결과를 자동으로 분석합니다</small></div></li>
+          <li><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6m-5 3h4M8 15a7 7 0 1 1 8 0l-1 3H9z"/></svg></span><div><strong>교육과정 개선 인사이트</strong><small>과정 진행에 따른 이슈 변화를 추적하고 개선방안을 제시합니다</small></div></li>
+          <li><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/></svg></span><div><strong>참여자별 피드백 자동화</strong><small>참여자 개개인에 대한 맞춤 피드백 작성을 지원합니다</small></div></li>
+        </ul>
+      </div>
+      <div class="login-form-panel">
+        <h2>로그인</h2>
+        <p class="muted">계정 정보를 입력해 플랫폼에 접속하세요.</p>
+        <form id="loginForm" novalidate>
+          <div class="field"><label for="loginId">아이디</label><input id="loginId" autocomplete="username" placeholder="아이디 입력"></div>
+          <div class="field" style="margin-top:14px"><label for="loginPw">비밀번호</label><input id="loginPw" type="password" autocomplete="current-password" placeholder="비밀번호 입력"></div>
+          <div class="error" id="loginError" role="alert"></div>
+          <button type="submit" class="button primary" style="width:100%;margin-top:18px">로그인</button>
+        </form>
+        <div class="login-demo-hint">
+          <strong>ⓘ 데모 계정 안내</strong>
+          <p>이 로그인 화면은 프로토타입입니다. 실제 인증 서버 없이 아래 데모 계정으로 접속해 권한별 화면 차이를 확인할 수 있습니다.</p>
+          <ul><li>사업 담당자 — <code>kdteval</code></li><li>시스템 관리자 — <code>kdteval_admin</code></li></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="appShell" hidden>
   <div class="mobile-shade" id="mobileShade"></div>
   <aside class="sidebar" id="sidebar" aria-label="주 메뉴">
     <a class="brand" href="#dashboard"><span class="brand-icon">▥</span><span>대한상공회의소<small>교육평가 AI</small></span></a>
     <div class="workspace business-switcher"><label for="globalBusiness"><small>현재 사업</small><select id="globalBusiness" aria-label="현재 사업 선택"></select></label></div>
     <nav id="nav"></nav>
-    <div class="sidebar-bottom"><span class="avatar">운</span><div>교육 운영 담당자<small>프로토타입 워크스페이스</small></div><span class="version">v8.0</span></div>
+    <div class="sidebar-bottom"><span class="avatar" id="userAvatar">운</span><div id="userInfo">교육 운영 담당자<small>프로토타입 워크스페이스</small></div><button class="icon-button" data-action="logout" title="로그아웃" aria-label="로그아웃">⏻</button></div>
   </aside>
   <div class="shell">
     <header class="topbar"><div class="breadcrumb"><button id="mobileMenu" class="icon-button mobile-only" aria-label="메뉴 열기">☰</button><span>교육 품질관리</span><span class="slash">/</span><strong id="crumb">대시보드</strong></div><div class="top-meta"><span class="avatar small">운</span></div></header>
     <main id="main" tabindex="-1"></main>
     <footer><span>대한상공회의소 교육평가 AI</span><span>강의평가 분석 · 교육과정 개선 · 사업공모 계획서 검토</span></footer>
+  </div>
   </div>
   <dialog id="entityModal" aria-labelledby="entityTitle"></dialog>
   <dialog id="modal" aria-labelledby="modalTitle"></dialog>
@@ -207,6 +264,7 @@ window.DemoData = {
     ['과정평가','final','훈련과정 목록','report'],
     ['부정훈련 모니터링','fraud-monitor','부정훈련 모니터링','alert'],
     ['계획서 AI 검토','plan','사업공모 계획서 검토','bulb'],
+    ['시스템 관리','user-manage','사용자 관리','users',['admin']],
     ['도움말','help','도움말','help']
   ],
   scores:[
@@ -280,8 +338,12 @@ window.DemoData = {
      ['demo-dev-1','cohort-dev-1','최종평가',5,24,'2026-08-21','previous',.84],
      ['demo-dev-2','cohort-dev-2','최종평가',5,26,'2026-09-01','current',.9]
    ];
-   return {schemaVersion:3,
-     businesses:[{id:'business-k',name:'K-뉴딜 아카데미'},{id:'business-d',name:'디지털선도기업아카데미'}],
+   return {schemaVersion:4,
+     users:[
+       {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:['business-k','business-d'],invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+       {id:'user-admin-1',name:'시스템 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+     ],
+     businesses:[{id:'business-k',name:'K-뉴딜 아카데미',ownerId:'user-manager-1'},{id:'business-d',name:'디지털선도기업아카데미',ownerId:'user-manager-1'}],
      companies:[{id:'company-intel',businessId:'business-k',name:'인텔',status:'참여 중'},{id:'company-b',businessId:'business-k',name:'B기업',status:'종료'},{id:'company-a',businessId:'business-d',name:'A기업',status:'참여 중'}],
      courses:[{id:'course-dx',companyId:'company-intel',name:'인텔 전문가 과정',status:'운영 중',createdAt:'2026-02-10'},{id:'course-smart',companyId:'company-b',name:'스마트 제조 실무',status:'종료',createdAt:'2026-01-15'},{id:'course-dev',companyId:'company-a',name:'AI 개발자 과정',status:'운영 중',createdAt:'2026-04-02'}],
      cohorts:[{id:'cohort-dx-4',courseId:'course-dx',name:'4기',startDate:'2026-03-02',endDate:'2026-05-29',interimEnabled:true},{id:'cohort-dx-5',courseId:'course-dx',name:'5기',startDate:'2026-04-06',endDate:'2026-06-30',interimEnabled:true},{id:'cohort-dx-6',courseId:'course-dx',name:'6기',startDate:'2026-07-01',endDate:'2026-09-30',interimEnabled:true},{id:'cohort-smart-1',courseId:'course-smart',name:'1기',startDate:'2026-06-15',endDate:'2026-09-11',interimEnabled:false},{id:'cohort-dev-1',courseId:'course-dev',name:'1기',startDate:'2026-05-11',endDate:'2026-08-07',interimEnabled:true},{id:'cohort-dev-2',courseId:'course-dev',name:'2기',startDate:'2026-08-03',endDate:'2026-10-30',interimEnabled:true}],
@@ -307,9 +369,21 @@ window.DemoData = {
        if(!d.fraudMonitorConfig)d.fraudMonitorConfig={itemKeys:window.DemoData.scores.map(s=>s[0]),thresholds:{critical:2.5,recommend:3,caution:3.5}};
        d.schemaVersion=3;
      }
+     if(d.schemaVersion===3){
+       if(!Array.isArray(d.users)||!d.users.length){
+         d.users=[
+           {id:'user-manager-1',name:'김담당',email:'kdteval@kcci-eval.demo',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+           {id:'user-admin-1',name:'시스템 관리자',email:'kdteval_admin@kcci-eval.demo',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
+         ];
+       }
+       const defaultOwner=d.users.find(u=>u.role==='manager')?.id||null;
+       (d.businesses||[]).forEach(b=>{if(!b.ownerId)b.ownerId=defaultOwner;});
+       d.schemaVersion=4;
+     }
    }
    function validate(d){
-     if(d.schemaVersion!==3)throw new Error('지원하지 않는 저장 데이터 버전입니다.');
+     if(d.schemaVersion!==4)throw new Error('지원하지 않는 저장 데이터 버전입니다.');
+     if(!Array.isArray(d.users)||new Set(d.users.map(x=>x.id)).size!==d.users.length)throw new Error('사용자 데이터 구조가 올바르지 않습니다.');
      for(const kind of ['businesses','companies','courses','cohorts','evaluations']){
        if(!Array.isArray(d[kind]))throw new Error('저장 데이터 구조가 올바르지 않습니다.');
        if(new Set(d[kind].map(x=>x.id)).size!==d[kind].length)throw new Error('중복 ID가 있습니다.');
@@ -345,7 +419,10 @@ window.DemoData = {
      return copy({businesses,companies,courses,cohorts,evaluations:data.evaluations.filter(e=>cohorts.some(c=>c.id===e.cohortId)).map(evaluationView)});
    }
    const kinds={business:['businesses',null,null],company:['companies','businesses','businessId'],course:['courses','companies','companyId'],cohort:['cohorts','courses','courseId']};
-   function addEntity(kind,name,parentId){return mutate(d=>{const [collection,parent,foreign]=kinds[kind]||[];if(!collection)throw new Error('등록 유형을 확인해주세요.');name=String(name??'').trim();if(!name||name.length>120)throw new Error('이름은 1~120자로 입력해주세요.');if(parent&&!d[parent].some(x=>x.id===parentId))throw new Error('소속 상위 항목을 선택해주세요.');if(d[collection].some(x=>x.name.toLocaleLowerCase()===name.toLocaleLowerCase()&&(!foreign||x[foreign]===parentId)))throw new Error('같은 상위 항목에 이미 등록된 이름입니다.');const item={id:uuid(kind),name,...(foreign?{[foreign]:parentId}:{}),...(kind==='company'?{status:'참여 중'}:kind==='course'?{status:'운영 중',createdAt:new Date().toISOString().slice(0,10)}:{})};d[collection].push(item);return item;});}
+   function addEntity(kind,name,parentId,extra={}){return mutate(d=>{const [collection,parent,foreign]=kinds[kind]||[];if(!collection)throw new Error('등록 유형을 확인해주세요.');name=String(name??'').trim();if(!name||name.length>120)throw new Error('이름은 1~120자로 입력해주세요.');if(parent&&!d[parent].some(x=>x.id===parentId))throw new Error('소속 상위 항목을 선택해주세요.');if(d[collection].some(x=>x.name.toLocaleLowerCase()===name.toLocaleLowerCase()&&(!foreign||x[foreign]===parentId)))throw new Error('같은 상위 항목에 이미 등록된 이름입니다.');const item={id:uuid(kind),name,...(foreign?{[foreign]:parentId}:{}),...(kind==='company'?{status:'참여 중'}:kind==='course'?{status:'운영 중',createdAt:new Date().toISOString().slice(0,10)}:kind==='business'?{ownerId:extra.ownerId||null}:{})};d[collection].push(item);return item;});}
+   function addUser(input){return mutate(d=>{const email=String(input.email||'').trim().toLowerCase();if(!email||!/^\S+@\S+\.\S+$/.test(email))throw new Error('올바른 이메일 주소를 입력해주세요.');if(d.users.some(u=>u.email.toLowerCase()===email))throw new Error('이미 등록된 이메일입니다.');const name=String(input.name||'').trim();if(!name)throw new Error('이름을 입력해주세요.');const item={id:uuid('user'),name,email,role:input.role==='admin'?'admin':'manager',status:'invited',businessIds:[...(input.businessIds||[])],invitedAt:new Date().toISOString().slice(0,10),joinedAt:null};d.users.push(item);return item;});}
+   function updateUser(id,changes){return mutate(d=>{const u=d.users.find(x=>x.id===id);if(!u)throw new Error('사용자를 찾을 수 없습니다.');for(const key of Object.keys(changes))if(!['status','businessIds','joinedAt'].includes(key))throw new Error('변경할 수 없는 사용자 필드입니다.');if(changes.status&&!['active','invited','disabled'].includes(changes.status))throw new Error('상태 값을 확인해주세요.');Object.assign(u,copy(changes));return u;});}
+   function deleteUser(id){return mutate(d=>{const i=d.users.findIndex(x=>x.id===id);if(i<0)throw new Error('사용자를 찾을 수 없습니다.');if(d.users[i].status!=='invited')throw new Error('초대 중인 사용자만 삭제할 수 있습니다.');const [removed]=d.users.splice(i,1);return removed;});}
    function updateCourse(id,patch){return mutate(d=>{const item=d.courses.find(x=>x.id===id);if(!item)throw new Error('과정을 찾을 수 없습니다.');const name=String(patch?.name??item.name).trim();if(!name||name.length>120)throw new Error('과정명은 1~120자로 입력해주세요.');if(d.courses.some(x=>x.id!==id&&x.companyId===item.companyId&&x.name.toLocaleLowerCase()===name.toLocaleLowerCase()))throw new Error('같은 기업에 이미 등록된 과정명입니다.');item.name=name;item.description=String(patch?.description??item.description??'').trim().slice(0,500);if(patch?.status){if(!['운영 중','종료'].includes(patch.status))throw new Error('과정 상태를 확인해주세요.');item.status=patch.status;}return item;});}
    function updateCompany(id,patch){return mutate(d=>{const item=d.companies.find(x=>x.id===id);if(!item)throw new Error('기업을 찾을 수 없습니다.');if(patch?.status){if(!['참여 중','종료'].includes(patch.status))throw new Error('기업 상태를 확인해주세요.');item.status=patch.status;}return item;});}
    function addEvaluation(input){return mutate(d=>{if(d.evaluations.some(e=>e.cohortId===input.cohortId&&e.type===input.type))throw new Error('이 기수에는 같은 구분의 평가가 이미 있습니다. 기존 평가를 확인하거나 다른 기수를 선택해주세요.');const item={...copy(input),id:uuid('evaluation'),feedback:{},checks:{},planText:''};d.evaluations.push(item);return item;});}
@@ -353,7 +430,7 @@ window.DemoData = {
    function updateFraudConfig(patch){return mutate(d=>{d.fraudMonitorConfig={...d.fraudMonitorConfig,...copy(patch)};return d.fraudMonitorConfig;});}
    function deleteEvaluation(id){return mutate(d=>{const i=d.evaluations.findIndex(x=>x.id===id);if(i<0)throw new Error('평가를 찾을 수 없습니다.');const [removed]=d.evaluations.splice(i,1);return removed;});}
    function updateCohort(id,changes){return mutate(d=>{const h=d.cohorts.find(x=>x.id===id);if(!h)throw new Error('기수를 찾을 수 없습니다.');for(const key of Object.keys(changes))if(!['interimEnabled','finalEnabled','startDate','endDate'].includes(key))throw new Error('변경할 수 없는 기수 필드입니다.');Object.assign(h,copy(changes));return h;});}
-   return {key:KEY,get warning(){return warning;},snapshot:()=>copy(data),scope,listEvaluations:()=>data.evaluations.map(evaluationView),getEvaluation:id=>{const e=data.evaluations.find(x=>x.id===id);return e?evaluationView(e):null;},pathFromCohort:id=>copy(pathFromCohort(id)),addEntity,addEvaluation,updateEvaluation,deleteEvaluation,updateCohort,updateCourse,updateCompany,updateFraudConfig};
+   return {key:KEY,get warning(){return warning;},snapshot:()=>copy(data),scope,listEvaluations:()=>data.evaluations.map(evaluationView),getEvaluation:id=>{const e=data.evaluations.find(x=>x.id===id);return e?evaluationView(e):null;},pathFromCohort:id=>copy(pathFromCohort(id)),addEntity,addEvaluation,updateEvaluation,deleteEvaluation,updateCohort,updateCourse,updateCompany,updateFraudConfig,addUser,updateUser,deleteUser};
  }
  function browserStorage(){try{return window.localStorage;}catch{return {getItem(){throw new Error('localStorage 접근이 제한되어 있습니다.');},setItem(){throw new Error('localStorage 접근이 제한되어 있습니다.');}};}}
  window.EvaluationRepository={createRepository,key:KEY};
@@ -461,7 +538,14 @@ window.DemoData = {
 (function(){
  'use strict';
  const D=window.DemoData,S=window.PlatformServices,R=window.PlatformRepository,H=window.HierarchyUI;
- const state={route:'dashboard',selected:'',filters:{businessId:R.snapshot().businesses[0]?.id||'',companyId:'',courseId:'',cohortId:''},compareIds:[],tab:'overview',sortKey:0,sortAsc:true,search:'',participantFilter:'전체',issueFilter:'전체',evalTypeTab:'중간평가',feedback:{},checks:{},file:null,fileInfo:null,draft:{course:'',round:'',type:'중간평가',scale:'5',customScale:'',count:'10',freeText:'4'},uploadStep:1,uploadBusy:false,uploadSeq:0,calculatorRaw:'6.74',calculatorScale:'7',analysisDetail:false,analysisFilters:{search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''},pagination:{business:{page:1,size:20},company:{page:1,size:20},course:{page:1,size:20},cohort:{page:1,size:20},analysis:{page:1,size:20},finalTemplate:{page:1,size:20}},planCourseId:'',planCohortId:'',planMode:'list',drawer:null};
+ const AUTH_KEY='kcci-auth-v1';
+ const CREDENTIALS={kdteval:{password:'kccidlca2026!',userId:'user-manager-1'},kdteval_admin:{password:'kccidlca2026!',userId:'user-admin-1'}};
+ function getSession(){try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null');}catch{return null;}}
+ function setSession(userId){try{localStorage.setItem(AUTH_KEY,JSON.stringify({userId}));}catch{}}
+ function clearSession(){try{localStorage.removeItem(AUTH_KEY);}catch{}}
+ function findUser(id){return R.snapshot().users.find(u=>u.id===id)||null;}
+ function accessibleBusinesses(user,d=R.snapshot()){return user.role==='admin'?d.businesses:d.businesses.filter(b=>user.businessIds.includes(b.id));}
+ const state={route:'dashboard',currentUser:null,selected:'',filters:{businessId:'',companyId:'',courseId:'',cohortId:''},compareIds:[],tab:'overview',sortKey:0,sortAsc:true,search:'',participantFilter:'전체',issueFilter:'전체',evalTypeTab:'중간평가',feedback:{},checks:{},file:null,fileInfo:null,draft:{course:'',round:'',type:'중간평가',scale:'5',customScale:'',count:'10',freeText:'4'},uploadStep:1,uploadBusy:false,uploadSeq:0,calculatorRaw:'6.74',calculatorScale:'7',analysisDetail:false,analysisFilters:{search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''},pagination:{business:{page:1,size:20},company:{page:1,size:20},course:{page:1,size:20},cohort:{page:1,size:20},analysis:{page:1,size:20},finalTemplate:{page:1,size:20}},planCourseId:'',planCohortId:'',planMode:'list',drawer:null};
  const $=id=>document.getElementById(id);
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const badge=(text,tone='')=>`<span class="badge ${tone}">${esc(text)}</span>`;
@@ -483,9 +567,10 @@ window.DemoData = {
  const title=()=>D.navigation.find(n=>n[1]===state.route)?.[2]||'대시보드';
  const sampleNotice=()=>`<div class="notice">ⓘ <span><strong>분석 결과</strong></span></div>`;
  function heading(name,description,action=''){return `<div class="page-heading"><div><h1>${name}</h1><p>${description}</p></div>${action}</div>`;}
- function navigate(route){if(!D.navigation.some(n=>n[1]===route))route='dashboard';if(state.route!==route){state.tab='overview';state.search='';state.planResult=false;}state.route=route;if(route==='plan'&&state.planMode!=='course'&&state.planMode!=='edit')state.planMode='list';if(route==='catalog'){state.filters.courseId='';state.filters.cohortId='';}if(location.hash!==`#${route}`)location.hash=route;render();$('sidebar').classList.remove('open');$('mobileShade').classList.remove('show');}
- function renderNav(){const gb=$('globalBusiness');if(gb){const bs=R.snapshot().businesses;gb.innerHTML=bs.map(b=>`<option value="${b.id}" ${b.id===state.filters.businessId?'selected':''}>${esc(b.name)}</option>`).join('');} $('nav').innerHTML=D.navigation.map(([group,route,label,i])=>`${group?`<div class="nav-group">${group}</div>`:''}<a class="nav-item ${route===state.route?'active':''}" href="#${route}" ${route===state.route?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('');$('crumb').textContent=title();}
- function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':finalTemplateManagement,'fraud-monitor':fraudMonitorPage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
+ function navAllowed(entry){return !entry[4]||entry[4].includes(state.currentUser?.role);}
+ function navigate(route){const entry=D.navigation.find(n=>n[1]===route);if(!entry||!navAllowed(entry))route='dashboard';if(state.route!==route){state.tab='overview';state.search='';state.planResult=false;}state.route=route;if(route==='plan'&&state.planMode!=='course'&&state.planMode!=='edit')state.planMode='list';if(route==='catalog'){state.filters.courseId='';state.filters.cohortId='';}if(location.hash!==`#${route}`)location.hash=route;render();$('sidebar').classList.remove('open');$('mobileShade').classList.remove('show');}
+ function renderNav(){const gb=$('globalBusiness');if(gb){const bs=state.currentUser?accessibleBusinesses(state.currentUser):[];gb.innerHTML=bs.map(b=>`<option value="${b.id}" ${b.id===state.filters.businessId?'selected':''}>${esc(b.name)}</option>`).join('');} $('nav').innerHTML=D.navigation.filter(navAllowed).map(([group,route,label,i])=>`${group?`<div class="nav-group">${group}</div>`:''}<a class="nav-item ${route===state.route?'active':''}" href="#${route}" ${route===state.route?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('');$('crumb').textContent=title();}
+ function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':finalTemplateManagement,'fraud-monitor':fraudMonitorPage,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
    renderDrawer();
    if((state.route==='final'||state.route==='interim')&&state.selected)bindCalculator();}
  function renderDrawer(){
@@ -493,6 +578,8 @@ window.DemoData = {
    if(state.drawer?.type==='cohorts'){openDrawer(...cohortDrawerContent(state.drawer.courseId));return;}
    if(state.drawer?.type==='fraud-detail'){openDrawer(...fraudDetailContent(state.drawer.id));return;}
    if(state.drawer?.type==='fraud-config'){openDrawer(...fraudConfigContent());return;}
+   if(state.drawer?.type==='invite-user'){openDrawer(...inviteUserContent());return;}
+   if(state.drawer?.type==='user-access'){openDrawer(...userAccessContent(state.drawer.id));return;}
    closeDrawer();
  }
  function emptyEvaluation(type='평가'){return `<div class="card empty"><h3>등록된 ${type}가 없습니다.</h3><p>해당 기수에 최종평가만 등록해도 모든 단일 평가 분석을 사용할 수 있습니다.</p><div style="margin-top:15px">${button('＋ 새 평가 분석','new','primary')}</div></div>`;}
@@ -1109,6 +1196,44 @@ window.DemoData = {
    if(!(critical<recommend&&recommend<caution)){$('fraudConfigError').textContent='심각 < 권고 < 주의 순서로 값을 입력해주세요.';return;}
    R.updateFraudConfig({itemKeys,thresholds:{critical,recommend,caution}});state.drawer=null;closeDrawer();render();toast('모니터링 기준을 저장했습니다. 새로 등록하는 중간평가부터 적용됩니다.');
  }
+ function userManagePage(){
+   const d=R.snapshot();
+   const statusBadge=s=>badge(s==='active'?'활성':s==='invited'?'초대됨':'비활성',s==='active'?'green':s==='invited'?'blue':'');
+   const roleLabel=r=>r==='admin'?'시스템 관리자':'사업 담당자';
+   const rows=d.users.map(u=>{const bizNames=u.businessIds.map(id=>d.businesses.find(b=>b.id===id)?.name).filter(Boolean);return `<tr><td><strong>${esc(u.name)}</strong></td><td>${esc(u.email)}</td><td>${badge(roleLabel(u.role),u.role==='admin'?'purple':'blue')}</td><td>${u.role==='admin'?'<span class="muted">전체 사업</span>':bizNames.length?esc(bizNames.join(', ')):'<span class="muted">담당 사업 없음</span>'}</td><td>${statusBadge(u.status)}</td><td>${u.role==='admin'?'':button('담당 사업','user-access','subtle small',`data-id="${u.id}"`)+' '+(u.status==='invited'?button('초대 취소','delete-user','subtle small danger',`data-id="${u.id}"`):button(u.status==='active'?'비활성화':'활성화','toggle-user-status','subtle small',`data-id="${u.id}" data-status="${u.status==='active'?'disabled':'active'}"`))}</td></tr>`;}).join('');
+   return heading('사용자 관리','플랫폼을 사용할 사업 담당자를 초대하고, 사용자 현황과 담당 사업을 관리합니다.',button('＋ 이메일로 초대','invite-user','primary'))+
+   `<div class="notice">ⓘ <span>이 화면은 프로토타입입니다. "초대"는 실제로 이메일을 발송하지 않으며, 초대된 사용자는 이 브라우저의 데모 계정으로 로그인할 수 없습니다.</span></div>
+   <section class="card"><div class="card-head"><h2>사용자 목록</h2><p>총 ${d.users.length}명</p></div><div class="table-wrap"><table><thead><tr><th>사용자명</th><th>이메일</th><th>권한</th><th>담당 사업</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="empty">등록된 사용자가 없습니다.</td></tr>'}</tbody></table></div></section>`;
+ }
+ function inviteUserContent(){
+   const businesses=R.snapshot().businesses;
+   const body=`<div class="notice">ⓘ <span>실제 초대 메일은 이 프로토타입에서 발송되지 않습니다. 초대 즉시 목록에 "초대됨" 상태로 추가됩니다.</span></div>
+   <div class="field"><label for="inviteName">이름</label><input id="inviteName" placeholder="담당자 이름"></div>
+   <div class="field" style="margin-top:14px"><label for="inviteEmail">이메일</label><input id="inviteEmail" type="email" placeholder="name@company.com"></div>
+   <h3 style="margin:20px 0 8px">담당 사업 (선택, 나중에 변경 가능)</h3>
+   <div class="fraud-config-list">${businesses.map(b=>`<label><input type="checkbox" name="inviteBiz" value="${b.id}">${esc(b.name)}</label>`).join('')||'<span class="muted">등록된 사업이 없습니다.</span>'}</div>
+   <div class="error" id="inviteError" role="alert"></div>`;
+   return['이메일로 초대','사업 담당자 계정 초대',body,button('닫기','close-drawer')+button('초대 보내기','save-invite-user','primary'),'sm'];
+ }
+ function saveInviteUser(){
+   const name=$('inviteName').value,email=$('inviteEmail').value;
+   const businessIds=[...document.querySelectorAll('input[name="inviteBiz"]:checked')].map(i=>i.value);
+   try{R.addUser({name,email,role:'manager',businessIds});state.drawer=null;closeDrawer();render();toast('초대를 등록했습니다. (실제 메일은 발송되지 않습니다)');}
+   catch(e){$('inviteError').textContent=e.message;}
+ }
+ function userAccessContent(id){
+   const d=R.snapshot(),user=d.users.find(u=>u.id===id);
+   if(!user)return['담당 사업 관리','','<p class="empty">사용자를 찾을 수 없습니다.</p>',button('닫기','close-drawer'),'sm'];
+   const body=`<p class="muted" style="margin-bottom:14px">${esc(user.name)}(${esc(user.email)})님이 접근할 수 있는 사업을 선택하세요.</p>
+   <div class="fraud-config-list">${d.businesses.map(b=>`<label><input type="checkbox" name="accessBiz" value="${b.id}" ${user.businessIds.includes(b.id)?'checked':''}>${esc(b.name)}</label>`).join('')||'<span class="muted">등록된 사업이 없습니다.</span>'}</div>
+   <div class="error" id="userAccessError" role="alert"></div>`;
+   return['담당 사업 관리','',body,button('닫기','close-drawer')+button('저장','save-user-access','primary',`data-id="${id}"`),'sm'];
+ }
+ function saveUserAccess(id){
+   const businessIds=[...document.querySelectorAll('input[name="accessBiz"]:checked')].map(i=>i.value);
+   try{R.updateUser(id,{businessIds});state.drawer=null;closeDrawer();render();toast('담당 사업을 저장했습니다.');}
+   catch(e){const el=$('userAccessError');if(el)el.textContent=e.message;}
+ }
  function helpPage(){
    const sections=[
      ['등록 관리','사업 → 기업 → 과정(기수 포함) 순서로 교육 운영정보를 등록·관리합니다. 사업과 기업은 별도로 등록하고, 같은 기업이 여러 과정을 운영할 수 있어 과정 관리에서 기수까지 함께 관리합니다.'],
@@ -1122,15 +1247,16 @@ window.DemoData = {
    `<section class="card card-pad">${sections.map(([t,d])=>`<div class="help-section"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join('')}</section>`;
  }
  function management(kind){
-    const d=R.snapshot(), business=d.businesses.find(b=>b.id===state.filters.businessId)||d.businesses[0];
+    const d=R.snapshot(), myBusinesses=accessibleBusinesses(state.currentUser,d), business=d.businesses.find(b=>b.id===state.filters.businessId)||myBusinesses[0];
     if(business && !state.filters.businessId) state.filters.businessId=business.id;
     const labels={business:'사업',company:'기업',course:'과정',cohort:'기수'}, label=labels[kind];
     const action=button('＋ 새 '+label,'add-entity','primary',`data-kind="${kind}" data-origin="manage"`);
     const stat=(name,value)=>`<div class="manage-stat"><span>${name}</span><strong>${value}<small>개</small></strong></div>`;
     let body='';
     if(kind==='business'){
-      const list=d.businesses, pg=pageSlice(list,'business'), pageList=pg.items;
-      body=`<div class="manage-summary single">${stat('총 사업',list.length)}</div><section class="card"><div class="card-head"><div><h2>등록 사업</h2><p>왼쪽 '현재 사업'에서 선택한 사업이 전체 분석 화면의 기준이 됩니다.</p></div>${paginationControls('business',pg).split('<div class="pagination"')[0]}</div><div class="table-wrap"><table><thead><tr><th>사업명</th><th>참여 기업</th><th>등록 과정</th><th>등록 기수</th></tr></thead><tbody>${pageList.map(b=>{const cs=d.companies.filter(c=>c.businessId===b.id), courses=d.courses.filter(c=>cs.some(x=>x.id===c.companyId)), cohorts=d.cohorts.filter(h=>courses.some(x=>x.id===h.courseId));return `<tr><td><strong>${esc(b.name)}</strong></td><td>${cs.length}개</td><td>${courses.length}개</td><td>${cohorts.length}개</td></tr>`}).join('')}</tbody></table></div>${paginationControls('business',pg).match(/<div class="pagination"[\s\S]*/)?.[0]||''}</section>`;
+      const isAdmin=state.currentUser.role==='admin';
+      const list=isAdmin?d.businesses:accessibleBusinesses(state.currentUser,d), pg=pageSlice(list,'business'), pageList=pg.items;
+      body=`<div class="manage-summary single">${stat('총 사업',list.length)}</div><section class="card"><div class="card-head"><div><h2>등록 사업</h2><p>왼쪽 '현재 사업'에서 선택한 사업이 전체 분석 화면의 기준이 됩니다.</p></div>${paginationControls('business',pg).split('<div class="pagination"')[0]}</div><div class="table-wrap"><table><thead><tr><th>사업명</th>${isAdmin?'<th>담당자</th>':''}<th>참여 기업</th><th>등록 과정</th><th>등록 기수</th></tr></thead><tbody>${pageList.map(b=>{const cs=d.companies.filter(c=>c.businessId===b.id), courses=d.courses.filter(c=>cs.some(x=>x.id===c.companyId)), cohorts=d.cohorts.filter(h=>courses.some(x=>x.id===h.courseId)), owner=d.users.find(u=>u.id===b.ownerId);return `<tr><td><strong>${esc(b.name)}</strong></td>${isAdmin?`<td>${owner?esc(owner.name):'<span class="muted">미지정</span>'}</td>`:''}<td>${cs.length}개</td><td>${courses.length}개</td><td>${cohorts.length}개</td></tr>`}).join('')||`<tr><td colspan="${isAdmin?5:4}" class="empty">등록된 사업이 없습니다.</td></tr>`}</tbody></table></div>${paginationControls('business',pg).match(/<div class="pagination"[\s\S]*/)?.[0]||''}</section>`;
     } else if(kind==='company'){
       const list=d.companies.filter(c=>c.businessId===state.filters.businessId), active=list.filter(c=>(c.status||'참여 중')==='참여 중').length, ended=list.length-active, pg=pageSlice(list,'company'), pageList=pg.items;
       body=`<div class="manage-summary">${stat('총 기업',list.length)}${stat('참여 중',active)}${stat('종료',ended)}</div><section class="card"><div class="card-head"><div><h2>${esc(business?.name||'사업 미선택')} · 기업</h2><p>현재 사업에 소속된 기업만 표시합니다.</p></div>${paginationControls('company',pg).split('<div class="pagination"')[0]}</div><div class="table-wrap"><table><thead><tr><th>기업명</th><th>상태</th><th>등록 과정</th><th>등록 기수</th><th>관리</th></tr></thead><tbody>${pageList.map(c=>{const courses=d.courses.filter(x=>x.companyId===c.id), cohorts=d.cohorts.filter(h=>courses.some(x=>x.id===h.courseId)), st=c.status||'참여 중';return `<tr><td><strong>${esc(c.name)}</strong></td><td>${badge(st,st==='참여 중'?'blue':'')}</td><td>${courses.length}개</td><td>${cohorts.length}개</td><td>${button('상태 변경','edit-company-status','subtle small',`data-id="${c.id}"`)}</td></tr>`}).join('')||'<tr><td colspan="5" class="empty">등록된 기업이 없습니다.</td></tr>'}</tbody></table></div>${paginationControls('company',pg).match(/<div class="pagination"[\s\S]*/)?.[0]||''}</section>`;
@@ -1169,8 +1295,8 @@ window.DemoData = {
  function openEntity(kind,origin){if(origin==='upload')captureDraft();state.entity={kind,origin,parents:{...(origin==='upload'?state.draft:state.filters)},name:''};const label={business:'사업',company:'기업',course:'과정',cohort:'기수'}[kind];$('entityModal').innerHTML=`<div class="modal-head"><div><h2 id="entityTitle">새 ${label} 등록</h2><p>소속 정보를 확인한 뒤 등록해주세요.</p></div><button class="icon-button" data-action="close-entity" aria-label="등록 창 닫기">×</button></div><div class="modal-body" id="entityBody">${entityForm()}</div><div class="modal-foot">${button('취소','close-entity')}${button('등록','save-entity','primary')}</div>`;$('entityModal').showModal();$('entityName').focus();}
  function saveEntity(){
    const x=state.entity,foreign={company:'businessId',course:'companyId',cohort:'courseId'}[x.kind];
-   try{const item=R.addEntity(x.kind,$('entityName').value,foreign?x.parents[foreign]:null);const d=R.snapshot();let values={businessId:'',companyId:'',courseId:'',cohortId:''};
-     if(x.kind==='business')values.businessId=item.id;
+   try{const item=R.addEntity(x.kind,$('entityName').value,foreign?x.parents[foreign]:null,x.kind==='business'?{ownerId:state.currentUser.id}:{});const d=R.snapshot();let values={businessId:'',companyId:'',courseId:'',cohortId:''};
+     if(x.kind==='business'){values.businessId=item.id;if(state.currentUser.role==='manager'){R.updateUser(state.currentUser.id,{businessIds:[...state.currentUser.businessIds,item.id]});state.currentUser=findUser(state.currentUser.id);}}
      if(x.kind==='company')values={...values,businessId:item.businessId,companyId:item.id};
      if(x.kind==='course'){const company=d.companies.find(c=>c.id===item.companyId);values={...values,businessId:company.businessId,companyId:company.id,courseId:item.id};}
      if(x.kind==='cohort'){const p=R.pathFromCohort(item.id);values={businessId:p.business.id,companyId:p.company.id,courseId:p.course.id,cohortId:item.id};}
@@ -1189,6 +1315,10 @@ window.DemoData = {
    const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const a=b.dataset.action;
    if(b.dataset.pageKey){const k=b.dataset.pageKey;state.pagination[k].page=Number(b.dataset.page)||1;render();return;}if(a==='evaluation-type-tab'){state.evalTypeTab=b.dataset.type;state.selected='';state.tab='overview';render();return;}if(a==='back-analysis-list'){state.analysisDetail=false;state.selected='';render();return;}if(a==='reset-analysis-filters'){state.analysisFilters={search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''};state.pagination.analysis.page=1;render();return;}if(a==='toggle-interim'){try{R.updateCohort(b.dataset.id,{interimEnabled:b.dataset.enabled==='true'});render();toast('중간평가 실시 여부를 변경했습니다.');}catch(e){toast(e.message);}return;}if(a==='toggle-final'){try{R.updateCohort(b.dataset.id,{finalEnabled:b.dataset.enabled==='true'});render();toast('최종평가 실시 여부를 변경했습니다.');}catch(e){toast(e.message);}return;}
    if(a==='open-fraud-detail'){state.drawer={type:'fraud-detail',id:b.dataset.id};render();return;}if(a==='fraud-config'){state.drawer={type:'fraud-config'};render();return;}if(a==='save-fraud-action'){saveFraudAction(b.dataset.id);return;}if(a==='save-fraud-config'){saveFraudConfig();return;}
+   if(a==='invite-user'){state.drawer={type:'invite-user'};render();return;}if(a==='save-invite-user'){saveInviteUser();return;}if(a==='user-access'){state.drawer={type:'user-access',id:b.dataset.id};render();return;}if(a==='save-user-access'){saveUserAccess(b.dataset.id);return;}
+   if(a==='toggle-user-status'){try{R.updateUser(b.dataset.id,{status:b.dataset.status});render();toast('사용자 상태를 변경했습니다.');}catch(e){toast(e.message);}return;}
+   if(a==='delete-user'){if(!confirm('이 초대를 취소할까요?'))return;try{R.deleteUser(b.dataset.id);render();toast('초대를 취소했습니다.');}catch(e){toast(e.message);}return;}
+   if(a==='logout'){clearSession();location.reload();return;}
    if(a==='plan-list'){state.planMode='list';state.planCourseId='';state.planCohortId='';render();return;}if(a==='plan-course'){state.planCourseId=b.dataset.id||state.planCourseId;state.planMode='course';state.planCohortId='';render();return;}if(a==='plan-edit'){state.planCohortId=b.dataset.id;state.planMode='edit';render();return;}if(a==='save-plan'){const st=planStore(),rec=st[state.planCohortId]||{};if(!rec.text){$('planError').textContent='먼저 운영계획서 파일을 업로드해주세요.';return;}rec.updatedAt=new Date().toISOString();st[state.planCohortId]=rec;savePlanStore(st);$('planError').textContent='';toast('업로드한 운영계획서와 추출 내용을 저장했습니다.');return;}if(a==='review-plan-v2'){const st=planStore(),rec=st[state.planCohortId]||{},text=rec.text||'';if(!text){$('planError').textContent='먼저 운영계획서 파일을 업로드해주세요.';return;}st[state.planCohortId]={...rec,reviewed:true,updatedAt:new Date().toISOString()};savePlanStore(st);state.planText=text;$('planError').textContent='';const path=R.pathFromCohort(state.planCohortId),cs=R.snapshot().cohorts.filter(h=>h.courseId===path.course.id).slice().sort((x,y)=>(x.startDate||'').localeCompare(y.startDate||'')),idx=cs.findIndex(h=>h.id===state.planCohortId),prev=idx>0?cs[idx-1]:null,has=prev?R.listEvaluations().some(e=>e.cohortId===prev.id):false;$('planOutput').innerHTML=planReviewV2(text,has);toast('업로드한 운영계획서 내용을 기준으로 AI 검토 결과를 생성했습니다.');return;}
    if(a==='add-entity'){openEntity(b.dataset.kind,b.dataset.origin||'catalog');return;}if(a==='close-entity'){$('entityModal').close();return;}if(a==='save-entity'){saveEntity();return;}if(a==='course-detail'){courseDetail(b.dataset.id);return;}if(a==='edit-company-status'){editCompanyStatus(b.dataset.id);return;}if(a==='save-company-status'){saveCompanyStatus(b.dataset.id);return;}if(a==='edit-course'){editCourse(b.dataset.id);return;}if(a==='save-course-edit'){saveCourseEdit(b.dataset.id);return;}if(a==='go-course-cohorts'){goCourseCohorts(b.dataset.id);return;}if(a==='open-cohort-analysis'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';state.analysisDetail=true;navigate('final');return;}if(a==='upload-slot'){uploadForCohort(b.dataset.cohort,b.dataset.type);return;}if(a==='final-entry'){openFinalEntry(b.dataset.cohort);return;}if(a==='edit-final-template'){editFinalTemplate();return;}if(a==='go-final-template'){$('modal').close();navigate('final-template-manage');return;}if(a==='add-final-template-row'){$('finalTemplateBody').insertAdjacentHTML('beforeend',finalTemplateEditRow());renumberFinalTemplateRows();return;}if(a==='delete-final-template-row'){b.closest('tr')?.remove();renumberFinalTemplateRows();return;}if(a==='save-final-template'){saveFinalTemplate();return;}if(a==='save-final-entry'){saveFinalEntry(b.dataset.cohort);return;}if(a==='noop'){return;}if(a==='select-eval'){state.selected=b.dataset.id;const ev=R.getEvaluation(b.dataset.id);if(ev)state.evalTypeTab=ev.type;state.tab='overview';render();return;}if(a==='register-cohort'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';navigate('final');return;}
    if(a==='new'){navigate('final');toast('기업 → 과정 → 기수를 선택한 뒤 평가자료를 등록해주세요.');}
@@ -1245,8 +1375,42 @@ window.DemoData = {
  document.addEventListener('change',e=>{const ps=e.target.closest('[data-page-size]');if(ps){const k=ps.dataset.pageSize;state.pagination[k].size=Number(ps.value)||20;state.pagination[k].page=1;render();return;}});
  document.addEventListener('change',e=>{const el=e.target.closest('[data-analysis-filter]');if(!el)return;const k=el.dataset.analysisFilter;state.analysisFilters[k]=el.value;state.pagination.analysis.page=1;if(k==='companyId'){state.analysisFilters.courseId='';state.analysisFilters.cohortId='';}if(k==='courseId')state.analysisFilters.cohortId='';render();});
  document.addEventListener('input',e=>{if(e.target.id!=='analysisSearch')return;state.analysisFilters.search=e.target.value;state.pagination.analysis.page=1;const pos=e.target.selectionStart;render();const n=$('analysisSearch');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(_){}}});
-window.addEventListener('hashchange',()=>{if(location.hash==='#main'){$('main').focus();return;}state.issueFilter='전체';navigate(location.hash.slice(1)||'dashboard');});
- navigate(location.hash.slice(1)||'dashboard');
+window.addEventListener('hashchange',()=>{if(!state.currentUser)return;if(location.hash==='#main'){$('main').focus();return;}state.issueFilter='전체';navigate(location.hash.slice(1)||'dashboard');});
+
+ function applyUserScope(user){
+   state.currentUser=user;
+   const roleLabel=user.role==='admin'?'시스템 관리자':'사업 담당자';
+   $('userAvatar').textContent=user.name.slice(0,1);
+   $('userInfo').innerHTML=`${esc(user.name)}<small>${roleLabel}</small>`;
+   const allowed=accessibleBusinesses(user);
+   if(!allowed.some(b=>b.id===state.filters.businessId))state.filters={businessId:allowed[0]?.id||'',companyId:'',courseId:'',cohortId:''};
+ }
+ function showApp(user){
+   applyUserScope(user);
+   $('loginScreen').hidden=true;$('appShell').hidden=false;
+   navigate(location.hash.slice(1)||'dashboard');
+ }
+ function showLogin(){
+   $('appShell').hidden=true;$('loginScreen').hidden=false;
+   const idInput=$('loginId');if(idInput)idInput.focus();
+ }
+ $('loginForm').addEventListener('submit',e=>{
+   e.preventDefault();
+   const id=$('loginId').value.trim(),pw=$('loginPw').value;
+   const cred=CREDENTIALS[id];
+   const user=cred&&cred.password===pw?findUser(cred.userId):null;
+   if(!user){$('loginError').textContent='아이디 또는 비밀번호를 확인해주세요.';return;}
+   if(user.status==='disabled'){$('loginError').textContent='비활성화된 계정입니다. 관리자에게 문의해주세요.';return;}
+   $('loginError').textContent='';
+   if(!user.joinedAt)try{R.updateUser(user.id,{status:'active',joinedAt:new Date().toISOString().slice(0,10)});}catch{}
+   setSession(user.id);
+   showApp(findUser(user.id));
+ });
+ (function boot(){
+   const session=getSession();
+   const user=session?findUser(session.userId):null;
+   if(user&&user.status!=='disabled')showApp(user);else{clearSession();showLogin();}
+ })();
 })();
 
 </script>
