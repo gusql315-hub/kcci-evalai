@@ -1127,9 +1127,19 @@ window.DemoData = {
    }catch(e){if(err)err.textContent=e.message;else toast(e.message);}
  }
 
+ /* ===== 공용 UI 컴포넌트: 모달 · 드로어 (Shared UI components: modal & drawer) =====
+  * 이 플랫폼에서 팝업(가운데 모달)이나 옆에서 슬라이드되는 패널(드로어)이 필요하면
+  * 반드시 아래 openModal()/openDrawer() 함수를 통해서만 열고 닫습니다.
+  * 이유: 동작(백드롭 클릭으로 닫기, 포커스 처리, 애니메이션, 크기 등)을 한 곳에서
+  * 관리해야 전체 화면에서 항상 같은 방식으로 동작합니다 — 화면마다 새로 만들면
+  * 나중에 "여기는 되는데 저기는 안 된다"는 불일치가 생깁니다.
+  * 자세한 규칙은 DEVELOPMENT_GUIDE.md의 "공용 컴포넌트" 항목을 참고하세요.
+  * ============================================================================= */
  function openModal(title,description,body,foot){$('modal').classList.remove('final-entry-dialog','template-edit-dialog');$('modal').innerHTML=`<div class="modal-head"><div><h2 id="modalTitle">${esc(title)}</h2><p>${esc(description)}</p></div><button class="icon-button" data-action="close-modal" aria-label="닫기">×</button></div><div class="modal-body">${body}</div><div class="modal-foot">${foot||button('닫기','close-modal')}</div>`;if(!$('modal').open)$('modal').showModal();}
  function openDrawer(title,description,body,foot,size='sm'){const el=$('drawer');el.classList.toggle('drawer-lg',size==='lg');el.innerHTML=`<div class="modal-head"><div><h2 id="drawerTitle">${esc(title)}</h2>${description?`<p>${esc(description)}</p>`:''}</div><button class="icon-button" data-action="close-drawer" aria-label="닫기">×</button></div><div class="modal-body">${body}</div>${foot?`<div class="modal-foot">${foot}</div>`:''}`;if(!el.open)el.showModal();}
  function closeDrawer(){const el=$('drawer');if(el.open)el.close();}
+ function dismissDrawer(){state.analysisDetail=false;state.drawer=null;closeDrawer();}
+ function wireDialogDismiss(dialog,onDismiss){dialog.addEventListener('click',e=>{if(e.target!==dialog)return;if(onDismiss)onDismiss();else if(dialog.open)dialog.close();});}
  function fileBlock(){return state.file?`<div class="file-info"><span class="badge blue">${esc(state.file.name.split('.').pop().toUpperCase())}</span><div class="file-name">${esc(state.file.name)}<small>${(state.file.size/1024).toFixed(1)} KB · ${state.fileInfo?state.fileInfo.source:'파일 확인 중'}</small></div>${button('제거','remove-file','subtle small danger')}</div>`:'';}
  function newEvaluation(reset=true,prefill={}){
    if(reset){state.file=null;state.fileInfo=null;state.uploadBusy=false;state.uploadSeq++;state.draft={businessId:state.filters.businessId,companyId:state.filters.companyId,courseId:state.filters.courseId,cohortId:state.filters.cohortId,type:'최종평가',scale:'5',customScale:'',count:'10',freeText:'4',...prefill};}
@@ -1458,7 +1468,7 @@ window.DemoData = {
    if(a==='add-entity'){openEntity(b.dataset.kind,b.dataset.origin||'catalog');return;}if(a==='close-entity'){$('entityModal').close();return;}if(a==='save-entity'){saveEntity();return;}if(a==='course-detail'){courseDetail(b.dataset.id);return;}if(a==='edit-company-status'){editCompanyStatus(b.dataset.id);return;}if(a==='save-company-status'){saveCompanyStatus(b.dataset.id);return;}if(a==='edit-course'){editCourse(b.dataset.id);return;}if(a==='save-course-edit'){saveCourseEdit(b.dataset.id);return;}if(a==='go-course-cohorts'){goCourseCohorts(b.dataset.id);return;}if(a==='open-cohort-analysis'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';state.analysisDetail=true;navigate('final');return;}if(a==='upload-slot'){uploadForCohort(b.dataset.cohort,b.dataset.type);return;}if(a==='final-entry'){openFinalEntry(b.dataset.cohort);return;}if(a==='edit-final-template'){editFinalTemplate();return;}if(a==='go-final-template'){$('modal').close();navigate('final-template-manage');return;}if(a==='add-final-template-row'){$('finalTemplateBody').insertAdjacentHTML('beforeend',finalTemplateEditRow());renumberFinalTemplateRows();return;}if(a==='delete-final-template-row'){b.closest('tr')?.remove();renumberFinalTemplateRows();return;}if(a==='save-final-template'){saveFinalTemplate();return;}if(a==='save-final-entry'){saveFinalEntry(b.dataset.cohort);return;}if(a==='noop'){return;}if(a==='select-eval'){state.selected=b.dataset.id;const ev=R.getEvaluation(b.dataset.id);if(ev)state.evalTypeTab=ev.type;state.tab='overview';render();return;}if(a==='register-cohort'){const path=R.pathFromCohort(b.dataset.id);state.filters={businessId:path.business.id,companyId:path.company.id,courseId:path.course.id,cohortId:path.cohort.id};state.selected='';navigate('final');return;}
    if(a==='new'){navigate('final');toast('기업 → 과정 → 기수를 선택한 뒤 평가자료를 등록해주세요.');}
    else if(a==='close-modal')$('modal').close();
-   else if(a==='close-drawer'){state.analysisDetail=false;state.drawer=null;closeDrawer();}
+   else if(a==='close-drawer')dismissDrawer();
    else if(a.startsWith('go-')){state.issueFilter='전체';navigate(a.slice(3));}
    else if(a==='open-eval'){$('modal').close();state.selected=b.dataset.id;const target=R.getEvaluation(b.dataset.id);state.filters={businessId:target.businessId,companyId:target.companyId,courseId:target.courseId,cohortId:target.cohortId};state.tab='overview';navigate('final');}
    else if(a==='analysis-tab'){state.tab=b.dataset.tab;render();document.getElementById('analysisTabs')?.scrollIntoView({block:'start'});}
@@ -1586,6 +1596,9 @@ window.addEventListener('hashchange',()=>{if(checkActivationHash())return;if(!st
    showLogin('유효하지 않거나 이미 사용된 초대 링크입니다.');
    return true;
  }
+ wireDialogDismiss($('entityModal'));
+ wireDialogDismiss($('modal'));
+ wireDialogDismiss($('drawer'),dismissDrawer);
  (function boot(){
    if(checkActivationHash())return;
    const session=getSession();
