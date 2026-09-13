@@ -176,8 +176,9 @@ dialog.drawer .modal-body{max-height:calc(100vh - 130px)}
 .login-screen:not([hidden]){display:flex}
 .login-card{display:grid;grid-template-columns:1.05fr 1fr;max-width:960px;width:100%;background:#fff;border-radius:18px;overflow:hidden;border:1px solid #e5e9f0;box-shadow:0 2px 8px #16305212,0 50px 100px -28px #16305247}
 .login-brand{background:linear-gradient(160deg,#0a5fd6,#064aad);color:#fff;padding:44px 40px;display:flex;flex-direction:column;justify-content:center}
-.login-brand-top{display:flex;align-items:center;gap:11px;margin-bottom:28px}
-.login-brand-top .brand-icon{background:rgba(255,255,255,.16)}
+.login-brand-top{display:flex;align-items:center;gap:13px;margin-bottom:28px}
+.login-brand-top .brand-mark{flex-shrink:0;width:66px;height:48px;display:flex;align-items:center;filter:drop-shadow(0 2px 5px rgba(4,20,50,.35))}
+.login-brand-top .brand-mark img{width:100%;height:100%;display:block}
 .login-brand-top strong{display:block;font-size:15px}
 .login-brand-top small{display:block;font-size:10px;letter-spacing:1.5px;color:#cfe0fb}
 .login-brand h1{font-size:22px;line-height:1.45;letter-spacing:-.4px;margin-bottom:14px}
@@ -217,7 +218,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="login-screen" id="loginScreen">
     <div class="login-card">
       <div class="login-brand">
-        <div class="login-brand-top"><span class="brand-icon">▥</span><div><strong>대한상공회의소</strong><small>교육평가 AI</small></div></div>
+        <div class="login-brand-top"><span class="brand-mark"><img src="assets/kcci-logo.svg" alt="대한상공회의소 로고"></span><div><strong>대한상공회의소</strong><small>교육평가 AI</small></div></div>
         <h1>교육평가 데이터를 분석하고,<br>과정 운영의 개선으로 연결합니다</h1>
         <p>교육과정별 평가 데이터를 체계적으로 관리하고, AI 분석을 통해 주요 의견과 개선사항을 확인할 수 있습니다.</p>
         <ul class="login-features">
