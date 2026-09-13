@@ -155,6 +155,13 @@ dialog.drawer .modal-body{max-height:calc(100vh - 130px)}
 .image-ai-box{border:1.5px dashed #b9cce5;border-radius:8px;padding:16px;background:#f8fbff;margin-bottom:16px;text-align:center}
 .image-ai-box.busy{opacity:.7}
 .image-ai-note{font-size:11px;color:#9b7a46;margin-top:8px;text-align:left}
+.image-ai-box .upload-zone{padding:16px;margin:10px 0}
+.final-image-list{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:4px}
+.final-image-list:not(:empty){margin-bottom:6px}
+.final-image-item{position:relative;width:88px;text-align:left}
+.final-image-item img{width:88px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;background:#fff}
+.final-image-item .final-image-name{display:block;font-size:10px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.final-image-item button{position:absolute;top:-8px;right:-8px;background:#fff;border:1px solid var(--line);border-radius:50%;width:20px;height:20px;font-size:13px;line-height:1;padding:0;color:var(--red);cursor:pointer}
 
 /* v8.0: 도움말 */
 .help-section{margin-bottom:20px}
@@ -752,7 +759,7 @@ window.DemoData = {
    const type=e.type;
    return top+sampleNotice()+`<section class="card card-pad section"><div class="card-head"><div><h2>${esc(e.round)} · ${type} 분석 결과</h2><p>${esc(e.business)} › ${esc(e.company)} › ${esc(e.course)}</p></div>${badge(type,type==='최종평가'?'blue':'purple')}</div><div class="context-metadata"><span>응답자 <b>${e.count}명</b></span><span>평가척도 <b id="overviewScale">${esc(currentScale())}</b>점</span><span>분석일 <b>${e.date}</b></span>${badge(e.status,'green')}</div></section>`+
    (type==='중간평가'?fraudMonitoringSection(e):'')+
-   `<div class="tabs" role="tablist" aria-label="분석 결과 영역">${[['overview','종합 분석'],['keywords','키워드 TOP 10'],['opinions','의견 분석'],['actions','개선방안'],['participants','참여자별 피드백']].map(([id,text])=>`<button class="tab ${state.tab===id?'active':''}" role="tab" aria-selected="${state.tab===id}" data-action="analysis-tab" data-tab="${id}">${text}</button>`).join('')}</div>`+
+   `<div class="tabs" id="analysisTabs" role="tablist" aria-label="분석 결과 영역">${[['overview','종합 분석'],['keywords','키워드 TOP 10'],['opinions','의견 분석'],['actions','개선방안'],['participants','참여자별 피드백']].map(([id,text])=>`<button class="tab ${state.tab===id?'active':''}" role="tab" aria-selected="${state.tab===id}" data-action="analysis-tab" data-tab="${id}">${text}</button>`).join('')}</div>`+
    (state.tab==='overview'?overviewContent(type)+midFinalPanel(type)+previousCohortPanel():state.tab==='keywords'?keywordsContent():state.tab==='opinions'?opinionContent():state.tab==='participants'?participantsEmbedded():recommendationCards())+
    (type==='중간평가'?`<section class="card download-strip"><div><h3>기업 공유용 결과보고서</h3><p>중간평가 핵심 결과와 교육 중 개선 권고사항을 A4 1페이지로 정리합니다.</p></div><div class="actions">${button('기업 공유용 결과보고서 PDF','company-report','primary')}</div></section>`:`<section class="card download-strip"><div><h3>결과 다운로드</h3><p>최종만족도평가 성과평가용 점수표</p></div><div class="actions">${button('↓ 성과평가용 점수표','download-scores','primary')}</div></section>`);
  }
@@ -1023,14 +1030,33 @@ window.DemoData = {
    const rows=finalTemplateRows();
    openModal('최종만족도평가 결과 입력',`${path.company.name} › ${path.course.name} › ${path.cohort.name}`,`
    <div class="notice">ⓘ <span>문항별 입력 방식은 <strong>등록 관리 → 최종평가 항목 관리</strong>에서 설정합니다. 점수형은 자동으로 10점 환산되고, 2개 선택지의 선택형은 첫 번째 선택지 비율만 입력하면 나머지 비율이 자동 계산됩니다.</span></div>
-   <div class="image-ai-box" id="finalImageAiBox"><strong>화면 캡처 이미지로 자동 입력</strong><p class="mini-note" style="margin:6px 0 12px">HRD-Net 등에서 열람한 평가결과 화면을 캡처해 올리면 항목별 결과 입력란에 점수를 자동으로 채워줍니다.</p><input id="finalImageAiInput" type="file" accept="image/*"><p class="image-ai-note">⚠ 프로토타입 동작입니다. 실제 서비스에서는 Claude API로 이미지를 분석해 항목별 점수를 자동 매칭합니다. 자동 입력 후에도 값은 직접 수정할 수 있습니다.</p></div>
+   <div class="image-ai-box" id="finalImageAiBox"><strong id="finalImageAiTitle">화면 캡처 이미지로 자동 입력</strong><p class="mini-note" style="margin:6px 0 12px">HRD-Net 등에서 열람한 평가결과 화면을 캡처해 올리면 항목별 결과 입력란에 점수를 자동으로 채워줍니다. 화면 한 장에 다 들어오지 않으면 여러 장으로 나눠서 올려도 됩니다.</p><label class="upload-zone" id="finalImageDropZone"><span class="upload-icon">↥</span><strong>이미지를 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>PNG, JPG 등 · 여러 장 한 번에 선택하거나 여러 번 나눠 추가할 수 있습니다</small><input id="finalImageAiInput" class="file-input" type="file" accept="image/*" multiple></label><div id="finalImageList" class="final-image-list"></div><div class="actions" style="justify-content:center;margin-top:4px"><button type="button" class="button primary small" id="finalImageAnalyzeBtn" disabled>업로드한 이미지 분석하기</button></div><p class="image-ai-note">⚠ 프로토타입 동작입니다. 실제 서비스에서는 Claude API가 업로드된 이미지 전체를 함께 분석해 항목별 점수를 자동 매칭합니다. 자동 입력 후에도 값은 직접 수정할 수 있습니다.</p></div>
    <div class="template-toolbar"><div><h3>평가항목 · 질문</h3><p class="mini-note">현재 등록된 최종만족도평가 항목입니다.</p></div>${button('평가항목 관리로 이동','go-final-template','subtle small')}</div>
    <div class="table-wrap final-entry-table"><table><colgroup><col style="width:190px"><col style="width:64px"><col><col style="width:210px"><col style="width:120px"></colgroup><thead><tr><th>평가영역</th><th>번호</th><th>평가내용</th><th>결과 입력</th><th>환산 결과</th></tr></thead><tbody>${(()=>{const spans={};rows.forEach((r,i)=>{if(i===0||rows[i-1].category!==r.category){let n=1;while(i+n<rows.length&&rows[i+n].category===r.category)n++;spans[i]=n;}});return rows.map((r,i)=>`<tr>${spans[i]?`<td rowspan="${spans[i]}" class="final-area">${esc(r.category)}</td>`:''}<td class="final-no">${i+1}</td><td class="final-question">${esc(r.question)}<small style="display:block;margin-top:4px;color:#7b8798">${r.type==='score'?`점수형 · ${r.scale}점 척도`:`선택형 · ${r.options.map(esc).join(' / ')}`}</small></td><td class="final-score">${r.type==='score'?`<input class="final-score-input" data-index="${i}" data-scale="${r.scale}" type="number" min="0" max="${r.scale}" step="0.01" placeholder="평균점수">`:(r.options.length===2?`<div style="display:flex;align-items:center;gap:8px;justify-content:center;white-space:nowrap"><label style="font-size:11px;color:#66758b">${esc(r.options[0])} <input class="final-choice-rate-input" data-index="${i}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:70px;margin-left:3px"></label><span style="font-size:11px;color:#66758b">${esc(r.options[1])} <strong id="finalChoiceComplement-${i}">—</strong></span></div>`:`<div style="display:flex;gap:6px;justify-content:center">${r.options.map((o,j)=>`<label style="font-size:11px;color:#66758b">${esc(o)}<input class="final-choice-input" data-index="${i}" data-option="${j}" type="number" min="0" max="100" step="0.1" placeholder="%" style="width:66px;margin-top:3px"></label>`).join('')}</div>`)}</td><td class="final-converted num" id="finalConverted-${i}">—</td></tr>`).join('')})()}</tbody></table></div>
    <section class="card card-pad" style="margin-top:18px"><h3>서술형 의견</h3><p class="mini-note" style="margin:6px 0 12px">서술형 결과 파일을 별도로 업로드하면 키워드 TOP 10, 긍정·중립·부정 및 주요 사유 5개, 개선방안 5개를 AI가 분석합니다.</p><input id="finalNarrativeFile" type="file" accept=".xlsx,.xls,.csv"></section>
    <div class="error" id="finalEntryError" role="alert"></div>`,button('취소','close-modal')+button(existing?'수정 저장':'결과 저장 및 분석','save-final-entry','primary',`data-cohort="${cohortId}"`));
    const calc=()=>{rows.forEach((r,i)=>{const out=$('finalConverted-'+i);if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`),v=Number(inp?.value);out.textContent=inp&&inp.value!==''&&v>=0&&v<=r.scale?(v/r.scale*10).toFixed(2):'—';}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`),v=Number(inp?.value),comp=$('finalChoiceComplement-'+i);if(inp&&inp.value!==''&&v>=0&&v<=100){out.textContent=`${v.toFixed(1)}%`;if(comp)comp.textContent=`${(100-v).toFixed(1)}%`;}else{out.textContent='—';if(comp)comp.textContent='—';}}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)],vals=ins.map(x=>Number(x.value)||0),total=vals.reduce((a,b)=>a+b,0);out.textContent=ins.length&&ins.every(x=>x.value!=='')&&Math.abs(total-100)<0.01?'100.0%':'—';}});};
    $('modal').classList.add('final-entry-dialog');document.querySelectorAll('.final-score-input,.final-choice-input,.final-choice-rate-input').forEach(x=>x.addEventListener('input',calc));
-   $('finalImageAiInput').addEventListener('change',e=>{if(!e.target.files[0])return;const box=$('finalImageAiBox');box.classList.add('busy');box.querySelector('strong').textContent='AI가 이미지를 분석하는 중…';setTimeout(()=>{rows.forEach((r,i)=>{if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`);if(inp)inp.value=(r.scale*(0.78+Math.random()*0.16)).toFixed(2);}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`);if(inp)inp.value=(70+Math.random()*20).toFixed(1);}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)];let remain=100;ins.forEach((x,j)=>{const v=j===ins.length-1?remain:Math.round(remain/(ins.length-j)*(0.7+Math.random()*0.6));x.value=Math.max(0,v);remain-=x.value;});}});calc();box.classList.remove('busy');box.querySelector('strong').textContent='화면 캡처 이미지로 자동 입력';toast('이미지 분석으로 점수를 입력했습니다. 값을 확인 후 저장해주세요.');},1400);});
+   let finalImages=[];
+   function renderFinalImages(){
+     $('finalImageList').innerHTML=finalImages.map((img,i)=>`<div class="final-image-item"><img src="${img.url}" alt="">
+      <span class="final-image-name">${esc(img.name)}</span><button type="button" class="icon-button" data-remove-image="${i}" aria-label="이미지 삭제">×</button></div>`).join('');
+     $('finalImageAnalyzeBtn').disabled=finalImages.length===0;
+   }
+   function addFinalImages(fileList){[...fileList].filter(f=>f.type.startsWith('image/')).forEach(file=>finalImages.push({file,name:file.name,url:URL.createObjectURL(file)}));renderFinalImages();}
+   $('finalImageAiInput').addEventListener('change',e=>{if(e.target.files.length)addFinalImages(e.target.files);e.target.value='';});
+   const izone=$('finalImageDropZone');
+   ['dragenter','dragover'].forEach(ev=>izone.addEventListener(ev,e=>{e.preventDefault();izone.classList.add('drag');}));
+   ['dragleave','drop'].forEach(ev=>izone.addEventListener(ev,e=>{e.preventDefault();izone.classList.remove('drag');}));
+   izone.addEventListener('drop',e=>{if(e.dataTransfer.files.length)addFinalImages(e.dataTransfer.files);});
+   $('finalImageList').addEventListener('click',e=>{const btn=e.target.closest('[data-remove-image]');if(!btn)return;const idx=Number(btn.dataset.removeImage);URL.revokeObjectURL(finalImages[idx].url);finalImages.splice(idx,1);renderFinalImages();});
+   $('finalImageAnalyzeBtn').addEventListener('click',()=>{
+     if(!finalImages.length)return;
+     const box=$('finalImageAiBox'),btn=$('finalImageAnalyzeBtn'),count=finalImages.length;
+     box.classList.add('busy');btn.disabled=true;btn.textContent='이미지 '+count+'장 분석 중…';$('finalImageAiTitle').textContent='AI가 이미지를 분석하는 중…';
+     setTimeout(()=>{rows.forEach((r,i)=>{if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`);if(inp)inp.value=(r.scale*(0.78+Math.random()*0.16)).toFixed(2);}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`);if(inp)inp.value=(70+Math.random()*20).toFixed(1);}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)];let remain=100;ins.forEach((x,j)=>{const v=j===ins.length-1?remain:Math.round(remain/(ins.length-j)*(0.7+Math.random()*0.6));x.value=Math.max(0,v);remain-=x.value;});}});calc();box.classList.remove('busy');btn.disabled=false;btn.textContent='업로드한 이미지 분석하기';$('finalImageAiTitle').textContent='화면 캡처 이미지로 자동 입력';toast(`이미지 ${count}장을 함께 분석하여 점수를 입력했습니다. 값을 확인 후 저장해주세요.`);},1300+count*250);
+   });
+   renderFinalImages();
  }
  function editFinalTemplate(){
    const rows=finalTemplateRows();
@@ -1374,7 +1400,7 @@ window.DemoData = {
    else if(a==='close-drawer'){state.analysisDetail=false;state.drawer=null;closeDrawer();}
    else if(a.startsWith('go-')){state.issueFilter='전체';navigate(a.slice(3));}
    else if(a==='open-eval'){$('modal').close();state.selected=b.dataset.id;const target=R.getEvaluation(b.dataset.id);state.filters={businessId:target.businessId,companyId:target.companyId,courseId:target.courseId,cohortId:target.cohortId};state.tab='overview';navigate('final');}
-   else if(a==='analysis-tab'){state.tab=b.dataset.tab;render();}
+   else if(a==='analysis-tab'){state.tab=b.dataset.tab;render();document.getElementById('analysisTabs')?.scrollIntoView({block:'start'});}
    else if(a==='sort-score'){const k=Number(b.dataset.key);state.sortAsc=state.sortKey===k?!state.sortAsc:true;state.sortKey=k;$('scoreTable').innerHTML=scoreTable();}
    else if(a==='evidence')evidence(b.dataset.keys.split(','),b.dataset.title);
    else if(a==='sentiment-evidence')sentimentEvidence(b.dataset.sentiment,b.dataset.key,b.dataset.title);
