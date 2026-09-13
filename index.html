@@ -358,7 +358,7 @@ window.DemoData = {
    ];
    return {schemaVersion:7,
      users:[
-       {id:'user-manager-1',name:'김담당',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:['business-k','business-d'],password:null,inviteToken:null,invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+       {id:'user-manager-1',name:'김부장',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:['business-k','business-d'],password:null,inviteToken:null,invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
        {id:'user-admin-1',name:'최고 관리자',email:'kcci_admin@korcham.net',role:'admin',status:'active',businessIds:[],password:null,inviteToken:null,invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
      ],
      businesses:[{id:'business-k',name:'K-뉴딜 아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'},fraudMonitoringEnabled:false},{id:'business-d',name:'디지털선도기업아카데미',ownerId:'user-manager-1',evalMode:'both',labels:{company:'기업',course:'과정'},fraudMonitoringEnabled:false}],
@@ -390,7 +390,7 @@ window.DemoData = {
      if(d.schemaVersion===3){
        if(!Array.isArray(d.users)||!d.users.length){
          d.users=[
-           {id:'user-manager-1',name:'김담당',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
+           {id:'user-manager-1',name:'김부장',email:'kcci@korcham.net',role:'manager',status:'active',businessIds:(d.businesses||[]).map(b=>b.id),invitedAt:'2026-01-05',joinedAt:'2026-01-06'},
            {id:'user-admin-1',name:'최고 관리자',email:'kcci_admin@korcham.net',role:'admin',status:'active',businessIds:[],invitedAt:'2026-01-01',joinedAt:'2026-01-01'}
          ];
        }
