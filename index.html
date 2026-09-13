@@ -262,7 +262,6 @@ window.DemoData = {
     ['','dashboard','대시보드','grid'],
     ['등록 관리','business-manage','사업 관리','book'],['','company-manage','기업 관리','users'],['','course-manage','과정 관리','book'],['','final-template-manage','최종평가 항목 관리','report'],
     ['과정평가','final','훈련과정 목록','report'],
-    ['부정훈련 모니터링','fraud-monitor','부정훈련 모니터링','alert'],
     ['계획서 AI 검토','plan','사업공모 계획서 검토','bulb'],
     ['시스템 관리','user-manage','사용자 관리','users',['admin']],
     ['도움말','help','도움말','help']
@@ -570,14 +569,12 @@ window.DemoData = {
  function navAllowed(entry){return !entry[4]||entry[4].includes(state.currentUser?.role);}
  function navigate(route){const entry=D.navigation.find(n=>n[1]===route);if(!entry||!navAllowed(entry))route='dashboard';if(state.route!==route){state.tab='overview';state.search='';state.planResult=false;}state.route=route;if(route==='plan'&&state.planMode!=='course'&&state.planMode!=='edit')state.planMode='list';if(route==='catalog'){state.filters.courseId='';state.filters.cohortId='';}if(location.hash!==`#${route}`)location.hash=route;render();$('sidebar').classList.remove('open');$('mobileShade').classList.remove('show');}
  function renderNav(){const gb=$('globalBusiness');if(gb){const bs=state.currentUser?accessibleBusinesses(state.currentUser):[];gb.innerHTML=bs.map(b=>`<option value="${b.id}" ${b.id===state.filters.businessId?'selected':''}>${esc(b.name)}</option>`).join('');} $('nav').innerHTML=D.navigation.filter(navAllowed).map(([group,route,label,i])=>`${group?`<div class="nav-group">${group}</div>`:''}<a class="nav-item ${route===state.route?'active':''}" href="#${route}" ${route===state.route?'aria-current="page"':''}>${icon(i)}${label}</a>`).join('');$('crumb').textContent=title();}
- function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':finalTemplateManagement,'fraud-monitor':fraudMonitorPage,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
+ function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':finalTemplateManagement,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
    renderDrawer();
    if((state.route==='final'||state.route==='interim')&&state.selected)bindCalculator();}
  function renderDrawer(){
    if(state.route==='final'&&state.analysisDetail){openDrawer('평가 분석 결과','',analysisDetailBody(),'','lg');return;}
    if(state.drawer?.type==='cohorts'){openDrawer(...cohortDrawerContent(state.drawer.courseId));return;}
-   if(state.drawer?.type==='fraud-detail'){openDrawer(...fraudDetailContent(state.drawer.id));return;}
-   if(state.drawer?.type==='fraud-config'){openDrawer(...fraudConfigContent());return;}
    if(state.drawer?.type==='invite-user'){openDrawer(...inviteUserContent());return;}
    if(state.drawer?.type==='user-access'){openDrawer(...userAccessContent(state.drawer.id));return;}
    closeDrawer();
@@ -726,6 +723,7 @@ window.DemoData = {
    if(!cohortId||isSummary||!e)return top;
    const type=e.type;
    return top+sampleNotice()+`<section class="card card-pad section"><div class="card-head"><div><h2>${esc(e.round)} · ${type} 분석 결과</h2><p>${esc(e.business)} › ${esc(e.company)} › ${esc(e.course)}</p></div>${badge(type,type==='최종평가'?'blue':'purple')}</div><div class="context-metadata"><span>응답자 <b>${e.count}명</b></span><span>평가척도 <b id="overviewScale">${esc(currentScale())}</b>점</span><span>분석일 <b>${e.date}</b></span>${badge(e.status,'green')}</div></section>`+
+   (type==='중간평가'?fraudMonitoringSection(e):'')+
    `<div class="tabs" role="tablist" aria-label="분석 결과 영역">${[['overview','종합 분석'],['keywords','키워드 TOP 10'],['opinions','의견 분석'],['actions','개선방안'],['participants','참여자별 피드백']].map(([id,text])=>`<button class="tab ${state.tab===id?'active':''}" role="tab" aria-selected="${state.tab===id}" data-action="analysis-tab" data-tab="${id}">${text}</button>`).join('')}</div>`+
    (state.tab==='overview'?overviewContent(type)+midFinalPanel(type)+previousCohortPanel():state.tab==='keywords'?keywordsContent():state.tab==='opinions'?opinionContent():state.tab==='participants'?participantsEmbedded():recommendationCards())+
    (type==='중간평가'?`<section class="card download-strip"><div><h3>기업 공유용 결과보고서</h3><p>중간평가 핵심 결과와 교육 중 개선 권고사항을 A4 1페이지로 정리합니다.</p></div><div class="actions">${button('기업 공유용 결과보고서 PDF','company-report','primary')}</div></section>`:`<section class="card download-strip"><div><h3>결과 다운로드</h3><p>최종만족도평가 성과평가용 점수표</p></div><div class="actions">${button('↓ 성과평가용 점수표','download-scores','primary')}</div></section>`);
@@ -1153,33 +1151,25 @@ window.DemoData = {
      toast('CSV 파일을 다운로드했습니다.');
    }catch(err){toast('다운로드 전 점수 설정을 확인해주세요: '+err.message);}
  }
- function fraudMonitorSummary(list){const counts={critical:0,recommend:0,caution:0,good:0};list.forEach(e=>{if(e.fraudMonitoring)counts[e.fraudMonitoring.band]++;});return counts;}
- function fraudMonitorPage(){
-   const list=R.listEvaluations().filter(e=>e.type==='중간평가'&&e.fraudMonitoring).sort((a,b)=>a.fraudMonitoring.avgScore-b.fraudMonitoring.avgScore);
-   const counts=fraudMonitorSummary(list);
-   const actionBadge=status=>badge(status||'미조치',status==='조치완료'?'green':status==='검토중'?'blue':'orange');
-   const rows=list.map(e=>{const fm=e.fraudMonitoring,[label,cls]=fraudBandInfo[fm.band];return `<tr><td>${esc(e.company)}</td><td>${esc(e.course)}</td><td>${esc(e.round)}</td><td class="num">${fm.avgScore.toFixed(2)} / 5</td><td><span class="band-badge ${cls}">${label}</span></td><td>${actionBadge(e.fraudAction?.status)}</td><td>${button('상세보기','open-fraud-detail','subtle small',`data-id="${e.id}"`)}</td></tr>`;}).join('')||'<tr><td colspan="7" class="empty">등록된 중간평가가 없습니다. 중간평가를 등록하면 자동으로 모니터링 대상 여부를 분류합니다.</td></tr>';
-   const stat=(name,value,cls)=>`<div class="manage-stat"><span>${name}</span><strong><span class="band-badge ${cls}" style="font-size:16px">${value}건</span></strong></div>`;
-   return heading('부정훈련 모니터링','중간평가 등록 시점의 기준으로 자동 분류합니다. 담당자가 확인 후 조치 상태를 기록하세요.',button('모니터링 기준 설정','fraud-config','primary'))+
-   `<div class="fraud-summary">${stat('심각',counts.critical,'critical')}${stat('권고',counts.recommend,'recommend')}${stat('주의',counts.caution,'caution')}${stat('양호',counts.good,'good')}</div>`+
-   `<section class="card"><div class="card-head"><div><h2>중간평가 모니터링 목록</h2><p>5점 만점 환산 평균 · 등급은 등록 시점 기준으로 확정되며 이후 기준 변경의 영향을 받지 않습니다.</p></div></div><div class="table-wrap"><table><thead><tr><th>기업</th><th>과정</th><th>기수</th><th>평균점수</th><th>등급</th><th>조치상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
- }
- function fraudDetailContent(id){
-   const e=R.getEvaluation(id);
-   if(!e||!e.fraudMonitoring)return ['부정훈련 모니터링 상세','','<p class="empty">평가를 찾을 수 없습니다.</p>',button('닫기','close-drawer'),'sm'];
-   const fm=e.fraudMonitoring,[label,cls]=fraudBandInfo[fm.band],action=e.fraudAction||{status:'미조치',note:''};
+ function fraudMonitoringSection(e){
+   const fm=e.fraudMonitoring;
+   const head=`<div class="card-head" style="padding:0 0 14px"><div><h2>부정훈련 모니터링</h2><p>훈련 중도탈락·부정훈련 방지를 위해 중간평가 결과를 기준으로 이상징후를 조기에 확인합니다.</p></div>${button('모니터링 기준 설정','fraud-config-modal','subtle small')}</div>`;
+   if(!fm)return `<section class="card card-pad section">${head}<p class="empty">이 평가는 모니터링 대상 항목이 설정되기 전에 등록되어 모니터링 데이터가 없습니다.</p></section>`;
+   const [label,cls]=fraudBandInfo[fm.band],action=e.fraudAction||{status:'미조치',note:''};
    const itemsHtml=fm.itemScores.map(([name,score])=>`<div class="fraud-item-row"><span>${esc(name)}</span><span><strong>${score}</strong></span></div>`).join('');
-   const body=`<div class="context-metadata" style="margin-bottom:16px"><span>평균점수(5점 환산) <b>${fm.avgScore.toFixed(2)}</b></span><span class="band-badge ${cls}">${label}</span></div>
+   return `<section class="card card-pad section">${head}
+   <div class="context-metadata" style="margin-bottom:14px"><span>평균점수(5점 환산) <b>${fm.avgScore.toFixed(2)}</b></span><span class="band-badge ${cls}">${label}</span></div>
    <div class="notice">ⓘ <span>대상 항목 ${fm.itemKeys.length}개 · 등록 시점 기준(심각 ≤${fm.thresholds.critical} · 권고 ≤${fm.thresholds.recommend} · 주의 ≤${fm.thresholds.caution})으로 계산되어, 이후 기준을 변경해도 이 평가의 등급은 바뀌지 않습니다.</span></div>
-   <h3 style="margin:20px 0 6px">대상 항목별 점수</h3>${itemsHtml}
-   <h3 style="margin:22px 0 8px">담당자 조치</h3>
+   <h3 style="margin:18px 0 6px;font-size:13px">대상 항목별 점수</h3>${itemsHtml}
+   <h3 style="margin:20px 0 8px;font-size:13px">담당자 조치</h3>
    <div class="field"><label for="fraudActionStatus">조치 상태</label><select id="fraudActionStatus">${['미조치','검토중','조치완료'].map(s=>`<option value="${s}" ${action.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
    <div class="field" style="margin-top:12px"><label for="fraudActionNote">확인 내용 메모</label><textarea id="fraudActionNote" placeholder="추가 평가자료 검수 내용을 기록하세요.">${esc(action.note||'')}</textarea></div>
-   <div class="error" id="fraudActionError" role="alert"></div>`;
-   return [`${e.round} · ${e.course}`,`${e.business} › ${e.company}`,body,button('닫기','close-drawer')+button('저장','save-fraud-action','primary',`data-id="${id}"`),'sm'];
+   <div class="error" id="fraudActionError" role="alert"></div>
+   <div class="actions" style="margin-top:10px">${button('조치 저장','save-fraud-action','primary small',`data-id="${e.id}"`)}</div>
+   </section>`;
  }
  function saveFraudAction(id){try{R.updateEvaluation(id,{fraudAction:{status:$('fraudActionStatus').value,note:$('fraudActionNote').value,updatedAt:new Date().toISOString()}});render();toast('조치 상태를 저장했습니다.');}catch(e){const el=$('fraudActionError');if(el)el.textContent=e.message;}}
- function fraudConfigContent(){
+ function openFraudConfigModal(){
    const cfg=R.snapshot().fraudMonitorConfig;
    const body=`<div class="notice">ⓘ <span>여기서 바꾼 기준은 앞으로 새로 등록되는 중간평가부터 적용됩니다. 이미 등록된 평가의 등급은 유지됩니다.</span></div>
    <h3 style="margin:18px 0 8px">모니터링 대상 항목</h3>
@@ -1187,14 +1177,14 @@ window.DemoData = {
    <h3 style="margin:18px 0 8px">등급 경계값 (5점 만점 기준)</h3>
    <div class="form-grid"><div class="field"><label for="thCritical">심각 이하</label><input id="thCritical" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.critical}"></div><div class="field"><label for="thRecommend">권고 이하</label><input id="thRecommend" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.recommend}"></div><div class="field"><label for="thCaution">주의 이하</label><input id="thCaution" type="number" step="0.1" min="0" max="5" value="${cfg.thresholds.caution}"></div></div>
    <div class="error" id="fraudConfigError" role="alert"></div>`;
-   return ['모니터링 기준 설정','',body,button('닫기','close-drawer')+button('저장','save-fraud-config','primary'),'sm'];
+   openModal('모니터링 기준 설정','',body,button('취소','close-modal')+button('저장','save-fraud-config','primary'));
  }
  function saveFraudConfig(){
    const itemKeys=[...document.querySelectorAll('input[name="fraudItem"]:checked')].map(i=>i.value);
    const critical=Number($('thCritical').value),recommend=Number($('thRecommend').value),caution=Number($('thCaution').value);
    if(!itemKeys.length){$('fraudConfigError').textContent='대상 항목을 1개 이상 선택해주세요.';return;}
    if(!(critical<recommend&&recommend<caution)){$('fraudConfigError').textContent='심각 < 권고 < 주의 순서로 값을 입력해주세요.';return;}
-   R.updateFraudConfig({itemKeys,thresholds:{critical,recommend,caution}});state.drawer=null;closeDrawer();render();toast('모니터링 기준을 저장했습니다. 새로 등록하는 중간평가부터 적용됩니다.');
+   R.updateFraudConfig({itemKeys,thresholds:{critical,recommend,caution}});$('modal').close();render();toast('모니터링 기준을 저장했습니다. 새로 등록하는 중간평가부터 적용됩니다.');
  }
  function userManagePage(){
    const d=R.snapshot();
@@ -1237,8 +1227,8 @@ window.DemoData = {
  function helpPage(){
    const sections=[
      ['등록 관리','사업 → 기업 → 과정(기수 포함) 순서로 교육 운영정보를 등록·관리합니다. 사업과 기업은 별도로 등록하고, 같은 기업이 여러 과정을 운영할 수 있어 과정 관리에서 기수까지 함께 관리합니다.'],
-     ['훈련과정 목록 (과정평가)','등록된 기수별로 중간평가·최종만족도평가 등록 현황과 점수를 한눈에 보고, "분석하기"로 상세 분석 결과(키워드, 의견, 개선방안 등)를 확인합니다.'],
-     ['부정훈련 모니터링','중간평가 점수를 기준으로 담당자의 심화 확인이 필요한 기수를 자동으로 분류합니다(심각/권고/주의/양호). 등급 산정 기준은 설정에서 조정할 수 있으며, 조정 이후에는 새로 등록되는 평가부터 적용됩니다.'],
+     ['훈련과정 목록 (과정평가)','등록된 기수별로 중간평가·최종만족도평가 등록 현황과 점수를 한눈에 보고, "분석하기"로 상세 분석 결과(키워드, 의견, 개선방안 등)를 확인합니다. 중간평가 분석 결과 안에는 부정훈련 모니터링 결과도 함께 표시됩니다.'],
+     ['부정훈련 모니터링 (중간평가 분석 결과 내)','중간평가 점수를 기준으로 담당자의 심화 확인이 필요한 기수를 자동으로 분류합니다(심각/권고/주의/양호). 등급 산정 기준은 설정에서 조정할 수 있으며, 조정 이후에는 새로 등록되는 평가부터 적용됩니다.'],
      ['최종평가 항목 관리','최종만족도평가에서 사용할 평가영역·문항과 입력 방식(점수형/선택형)을 미리 정의합니다.'],
      ['최종만족도평가 결과 입력','HRD-Net 등에서 확인한 점수를 항목별로 입력합니다. 화면 캡처 이미지를 올리면 AI가 항목에 맞춰 점수를 자동으로 채워주는 기능(프로토타입)도 제공합니다.'],
      ['계획서 AI 검토','다음 기수의 사업공모 운영계획서를 업로드하면 이전 평가 결과를 근거로 보완이 필요한 부분을 AI가 검토합니다.']
@@ -1314,7 +1304,7 @@ window.DemoData = {
  document.addEventListener('click',e=>{
    const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const a=b.dataset.action;
    if(b.dataset.pageKey){const k=b.dataset.pageKey;state.pagination[k].page=Number(b.dataset.page)||1;render();return;}if(a==='evaluation-type-tab'){state.evalTypeTab=b.dataset.type;state.selected='';state.tab='overview';render();return;}if(a==='back-analysis-list'){state.analysisDetail=false;state.selected='';render();return;}if(a==='reset-analysis-filters'){state.analysisFilters={search:'',companyId:'',courseId:'',cohortId:'',training:'',mid:'',final:''};state.pagination.analysis.page=1;render();return;}if(a==='toggle-interim'){try{R.updateCohort(b.dataset.id,{interimEnabled:b.dataset.enabled==='true'});render();toast('중간평가 실시 여부를 변경했습니다.');}catch(e){toast(e.message);}return;}if(a==='toggle-final'){try{R.updateCohort(b.dataset.id,{finalEnabled:b.dataset.enabled==='true'});render();toast('최종평가 실시 여부를 변경했습니다.');}catch(e){toast(e.message);}return;}
-   if(a==='open-fraud-detail'){state.drawer={type:'fraud-detail',id:b.dataset.id};render();return;}if(a==='fraud-config'){state.drawer={type:'fraud-config'};render();return;}if(a==='save-fraud-action'){saveFraudAction(b.dataset.id);return;}if(a==='save-fraud-config'){saveFraudConfig();return;}
+   if(a==='fraud-config-modal'){openFraudConfigModal();return;}if(a==='save-fraud-action'){saveFraudAction(b.dataset.id);return;}if(a==='save-fraud-config'){saveFraudConfig();return;}
    if(a==='invite-user'){state.drawer={type:'invite-user'};render();return;}if(a==='save-invite-user'){saveInviteUser();return;}if(a==='user-access'){state.drawer={type:'user-access',id:b.dataset.id};render();return;}if(a==='save-user-access'){saveUserAccess(b.dataset.id);return;}
    if(a==='toggle-user-status'){try{R.updateUser(b.dataset.id,{status:b.dataset.status});render();toast('사용자 상태를 변경했습니다.');}catch(e){toast(e.message);}return;}
    if(a==='delete-user'){if(!confirm('이 초대를 취소할까요?'))return;try{R.deleteUser(b.dataset.id);render();toast('초대를 취소했습니다.');}catch(e){toast(e.message);}return;}
