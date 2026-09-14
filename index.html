@@ -508,13 +508,16 @@ window.DemoData = {
 (function(){
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const levels=[['businessId','사업','businesses'],['companyId','기업','companies'],['courseId','과정','courses'],['cohortId','기수','cohorts']];
- function selectors(repo,values,scope,depth=4,required=false,add=false){
+ function selectors(repo,values,scope,depth=4,required=false,add=false,lockBusiness=false){
    const d=repo.snapshot();
    const biz=d.businesses.find(b=>b.id===values.businessId);
    const bl=biz?.labels||{company:'기업',course:'과정'};
    const dynLevels=[['businessId','사업','businesses'],['companyId',bl.company,'companies'],['courseId',bl.course,'courses'],['cohortId','기수','cohorts']];
    const choices=[d.businesses,d.companies.filter(x=>!values.businessId||x.businessId===values.businessId),repo.scope({businessId:values.businessId,companyId:values.companyId}).courses,repo.scope({businessId:values.businessId,companyId:values.companyId,courseId:values.courseId}).cohorts];
-   return `<div class="hierarchy-selectors ${required?'registration-selectors':''}">${dynLevels.slice(0,depth).map(([key,label],i)=>`<div class="field"><label for="${scope}-${key}">${required?['①','②','③','④'][i]+' ':''}${label}</label><div class="selector-control"><select id="${scope}-${key}" data-hierarchy="${scope}" data-level="${key}" ${required&&i>0&&!values[dynLevels[i-1][0]]?'disabled':''}><option value="">${required?label+' 선택':'전체'}</option>${choices[i].map(x=>`<option value="${x.id}" ${values[key]===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>${add&&i>0?`<button type="button" class="button small" data-action="add-entity" data-kind="${['business','company','course','cohort'][i]}" data-origin="${scope}">＋ 새 ${label}</button>`:''}</div></div>`).join('')}</div>`;
+   return `<div class="hierarchy-selectors ${required?'registration-selectors':''}">${dynLevels.slice(0,depth).map(([key,label],i)=>{
+     if(lockBusiness&&i===0)return `<div class="field"><label>${required?'① ':''}${label}</label><input value="${esc(biz?.name||'')}" readonly></div>`;
+     return `<div class="field"><label for="${scope}-${key}">${required?['①','②','③','④'][i]+' ':''}${label}</label><div class="selector-control"><select id="${scope}-${key}" data-hierarchy="${scope}" data-level="${key}" ${required&&i>0&&!values[dynLevels[i-1][0]]?'disabled':''}><option value="">${required?label+' 선택':'전체'}</option>${choices[i].map(x=>`<option value="${x.id}" ${values[key]===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>${add&&i>0?`<button type="button" class="button small" data-action="add-entity" data-kind="${['business','company','course','cohort'][i]}" data-origin="${scope}">＋ 새 ${label}</button>`:''}</div></div>`;
+   }).join('')}</div>`;
  }
  function trail(e){return `<div class="data-trail" aria-label="선택 데이터 경로">${[e.business,e.company,e.course,e.round,e.type].map((t,i)=>`${i?'<span class="muted">›</span>':''}<span>${esc(t)}</span>`).join('')}</div>`;}
  function cascade(values,key,value){values[key]=value;const i=levels.findIndex(l=>l[0]===key);for(const [child] of levels.slice(i+1))values[child]='';return values;}
@@ -756,22 +759,23 @@ window.DemoData = {
    const responses=all.map((text,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text})).filter(r=>r.text);
    return {responses,totalCount:rows.length,filledCount:responses.length,emptyCount:rows.length-responses.length};
  }
- function buildNarrativeItem(templateRow,colIndex,rows){
-   const {responses,totalCount,filledCount,emptyCount}=extractNarrativeColumn(rows,colIndex);
+ function buildNarrativeItemFromResponses(templateRow,totalCount,responses){
+   const filledCount=responses.length,emptyCount=totalCount-filledCount;
    const kws=keywordFrequency(responses.map(r=>r.text),10);
    const topWords=kws.slice(0,3).map(k=>k.word);
    const summary=filledCount?`전체 ${totalCount}건 중 ${filledCount}건이 응답했습니다.${topWords.length?` 주요 키워드는 '${topWords.join("', '")}' 등이 확인되었습니다.`:' 반복적으로 나타나는 키워드는 확인되지 않았습니다.'}`:'등록된 응답이 없어 분석할 수 없습니다.';
    const repeatedOpinions=kws.filter(k=>k.count>=2).slice(0,5).map(k=>({keyword:k.word,count:k.count,sample:responses[k.indices[0]]?.text||''}));
    return {category:templateRow.category,question:templateRow.question,totalCount,filledCount,emptyCount,keywords:kws.map(k=>({word:k.word,count:k.count})),summary,repeatedOpinions,responses};
  }
+ function buildNarrativeItem(templateRow,colIndex,rows){
+   const {responses,totalCount}=extractNarrativeColumn(rows,colIndex);
+   return buildNarrativeItemFromResponses(templateRow,totalCount,responses);
+ }
  const NARRATIVE_POS_WORDS=['좋','만족','도움','유익','친절','전문','우수','추천','향상','성장','충분','재미'];
  const NARRATIVE_NEG_WORDS=['불편','부족','아쉽','어렵','힘들','느리','부적절','개선','미흡','불만','문제','열악'];
  function classifyNarrativeSentiment(text){let pos=0,neg=0;NARRATIVE_POS_WORDS.forEach(w=>{if(text.includes(w))pos++;});NARRATIVE_NEG_WORDS.forEach(w=>{if(text.includes(w))neg++;});if(pos>neg)return '긍정';if(neg>pos)return '부정';return '중립';}
- function buildNarrativeAnalysis(matchedNarrativeCols,rows){
-   if(!matchedNarrativeCols.length)return null;
-   const narrativeItems=matchedNarrativeCols.map(m=>buildNarrativeItem(m.row,m.colIndex,rows));
-   const respondents=rows.map((r,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text:matchedNarrativeCols.map(m=>String(r[m.colIndex]??'').trim()).filter(Boolean).join(' ')})).filter(p=>p.text);
-   if(!respondents.length)return {narrativeItems,adapter:null};
+ function buildAdapterFromRespondents(respondents){
+   if(!respondents.length)return null;
    const kws=keywordFrequency(respondents.map(p=>p.text),10);
    const keyOf=w=>'kw-'+w;
    const sentimentOf=new Map(respondents.map(p=>[p.id,classifyNarrativeSentiment(p.text)]));
@@ -796,7 +800,42 @@ window.DemoData = {
    const issues=kws.slice(0,4).map(k=>{const grp=respondents.filter(p=>tokenizeNarrative(p.text).includes(k.word));const negRatio=grp.length?grp.filter(p=>sentimentOf.get(p.id)==='부정').length/grp.length:0;return {key:keyOf(k.word),title:`'${k.word}' 관련 의견`,polarity:negRatio>0.4?'negative':'positive',count:grp.length,summary:`'${k.word}' 관련 서술형 의견`,evidence:grp.map(p=>[p.id,p.text])};});
    const duplicates=(()=>{const seen=new Map();respondents.forEach(p=>{const norm=p.text.replace(/\s+/g,'');if(norm.length<2)return;if(!seen.has(norm))seen.set(norm,[]);seen.get(norm).push(p.id);});return [...seen.entries()].filter(([,ids])=>ids.length>1).map(([text,ids])=>({text,ids}));})();
    const suspiciouslyShort=respondents.filter(p=>p.text.replace(/\s+/g,'').length<=2).map(p=>p.id);
-   return {narrativeItems,adapter:{keywords,opinions,sentiments,participants,improvements,issues,fraudSuspicion:{duplicates,suspiciouslyShort}}};
+   return {keywords,opinions,sentiments,participants,improvements,issues,fraudSuspicion:{duplicates,suspiciouslyShort}};
+ }
+ function buildNarrativeAnalysis(matchedNarrativeCols,rows){
+   if(!matchedNarrativeCols.length)return null;
+   const narrativeItems=matchedNarrativeCols.map(m=>buildNarrativeItem(m.row,m.colIndex,rows));
+   const respondents=rows.map((r,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text:matchedNarrativeCols.map(m=>String(r[m.colIndex]??'').trim()).filter(Boolean).join(' ')})).filter(p=>p.text);
+   return {narrativeItems,adapter:buildAdapterFromRespondents(respondents)};
+ }
+ /* 여러 서술형 응답 파일을 합쳐 분석합니다(중복 파일 업로드로 인한 이중 집계는
+  * 호출 전 파일명·크기 기준으로 걸러냅니다 - openFinalEntry의 addFinalNarrativeFiles 참고). */
+ function buildNarrativeAnalysisFromFiles(fileDatasets){
+   const valid=fileDatasets.filter(f=>f.matches.length);
+   if(!valid.length)return null;
+   const grouped=new Map();
+   valid.forEach(({matches,rows})=>{
+     matches.forEach(m=>{
+       const key=m.row.category+'||'+m.row.question;
+       if(!grouped.has(key))grouped.set(key,{row:m.row,totalCount:0,texts:[]});
+       const g=grouped.get(key);
+       g.totalCount+=rows.length;
+       g.texts.push(...rows.map(r=>String(r[m.colIndex]??'').trim()));
+     });
+   });
+   const narrativeItems=[...grouped.values()].map(g=>{
+     const responses=g.texts.map((text,i)=>({id:'응답자'+String(i+1).padStart(2,'0'),text})).filter(r=>r.text);
+     return buildNarrativeItemFromResponses(g.row,g.totalCount,responses);
+   });
+   let seq=0;
+   const respondents=[];
+   valid.forEach(({matches,rows})=>{
+     rows.forEach(r=>{
+       const text=matches.map(m=>String(r[m.colIndex]??'').trim()).filter(Boolean).join(' ');
+       if(text){seq++;respondents.push({id:'응답자'+String(seq).padStart(2,'0'),text});}
+     });
+   });
+   return {narrativeItems,adapter:buildAdapterFromRespondents(respondents)};
  }
  const title=()=>{if(state.route==='company-manage')return bizLabels(state.filters.businessId).company+' 관리';if(state.route==='course-manage')return bizLabels(state.filters.businessId).course+' 관리';return D.navigation.find(n=>n[1]===state.route)?.[2]||'대시보드';};
  const sampleNotice=()=>`<div class="notice">ⓘ <span><strong>분석 결과</strong></span></div>`;
@@ -1302,7 +1341,7 @@ window.DemoData = {
      </div>
      <hr class="rule" style="margin:14px 0">
      <strong style="font-size:12px">서술형 응답 파일</strong><p class="field-note" style="margin:3px 0 6px">HRD-Net에서 내려받은 서술형 응답 Excel 파일을 업로드해주세요.</p>
-     <label class="upload-zone compact" id="finalHrdnetNarrativeDropZone"><span class="upload-icon">↥</span><strong>파일을 끌어오거나 <span class="blue">파일 선택</span></strong><small>Excel .xlsx · CSV .csv</small><input id="finalHrdnetNarrativeInput" class="file-input" type="file" accept=".xlsx,.csv"></label><div id="finalHrdnetNarrativeInfo"></div>
+     <label class="upload-zone compact" id="finalHrdnetNarrativeDropZone"><span class="upload-icon">↥</span><strong>파일을 끌어오거나 <span class="blue">파일 선택</span></strong><small>Excel .xlsx · CSV .csv · 여러 파일 선택 가능</small><input id="finalHrdnetNarrativeInput" class="file-input" type="file" accept=".xlsx,.csv" multiple></label><div id="finalHrdnetNarrativeInfo" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
    </div>
    <div id="finalSurveyBox" hidden>
      <p class="field-note" style="margin:0 0 10px">점수와 서술형 응답이 포함된 설문 응답 파일을 등록해주세요.</p>
@@ -1334,34 +1373,52 @@ window.DemoData = {
      setTimeout(()=>{rows.forEach((r,i)=>{if(r.type==='score'){const inp=document.querySelector(`.final-score-input[data-index="${i}"]`);if(inp)inp.value=(r.scale*(0.78+Math.random()*0.16)).toFixed(2);}else if(r.options.length===2){const inp=document.querySelector(`.final-choice-rate-input[data-index="${i}"]`);if(inp)inp.value=(70+Math.random()*20).toFixed(1);}else{const ins=[...document.querySelectorAll(`.final-choice-input[data-index="${i}"]`)];let remain=100;ins.forEach((x,j)=>{const v=j===ins.length-1?remain:Math.round(remain/(ins.length-j)*(0.7+Math.random()*0.6));x.value=Math.max(0,v);remain-=x.value;});}});calc();box.classList.remove('busy');btn.disabled=false;btn.textContent='업로드한 이미지 분석하기';$('finalImageAiTitle').textContent='평가결과 화면 캡처';toast(`이미지 ${count}장을 함께 분석하여 점수를 입력했습니다. 값을 확인 후 저장해주세요.`);},1300+count*250);
    });
    renderFinalImages();
-   async function handleFinalHrdnetNarrativeFile(file){
-     const ext=file.name.split('.').pop().toLowerCase();
-     $('finalHrdnetNarrativeInfo').innerHTML=`<div class="file-info"><span class="badge blue">${esc(ext.toUpperCase())}</span><div class="file-name">${esc(file.name)}<small>${(file.size/1024).toFixed(1)} KB · 분석 중…</small></div></div>`;
-     try{
-       let parsed=null;
-       if(ext==='csv')parsed=S.parseCSV(await file.text());
-       else if(ext==='xlsx')parsed=await S.parseXLSXFile(file);
-       else throw new Error('Excel(.xlsx) 또는 CSV(.csv) 파일을 선택해주세요.');
-       const matches=matchHeadersToTemplate('final',parsed.headers).filter(m=>m.row.type==='narrative');
-       if(!matches.length)throw new Error('업로드한 파일에서 서술형 항목과 일치하는 열을 찾지 못했습니다. 열 제목이 등록된 서술형 질문과 일치하는지 확인해주세요.');
-       state.finalExcelNarrative=buildNarrativeAnalysis(matches,parsed.rows);
-       $('finalHrdnetNarrativeInfo').innerHTML=`<div class="file-info"><span class="badge blue">${esc(ext.toUpperCase())}</span><div class="file-name">${esc(file.name)}<small>서술형 문항 ${matches.length}개 · 응답 ${parsed.rows.length}행 확인</small></div></div>`;
-       toast('서술형 응답을 확인했습니다. 저장 시 AI 의견 분석에 반영됩니다.');
-     }catch(err){
-       state.finalExcelNarrative=null;
-       $('finalHrdnetNarrativeInfo').innerHTML=`<div class="error" role="alert">${esc(err.message)}</div>`;
-     }
+   let finalNarrativeFiles=[];
+   function recomputeFinalNarrative(){
+     const valid=finalNarrativeFiles.filter(f=>f.matches&&f.matches.length);
+     state.finalExcelNarrative=valid.length?buildNarrativeAnalysisFromFiles(valid.map(f=>({matches:f.matches,rows:f.parsed.rows}))):null;
    }
-   $('finalHrdnetNarrativeInput').addEventListener('change',e=>{if(e.target.files[0])handleFinalHrdnetNarrativeFile(e.target.files[0]);e.target.value='';});
+   function renderFinalNarrativeFiles(){
+     $('finalHrdnetNarrativeInfo').innerHTML=finalNarrativeFiles.map((f,i)=>{
+       if(f.pending)return `<div class="file-info"><span class="badge blue">${esc(f.ext)}</span><div class="file-name">${esc(f.file.name)}<small>분석 중…</small></div></div>`;
+       if(f.error)return `<div class="file-info"><span class="badge red">오류</span><div class="file-name">${esc(f.file.name)}<small>${esc(f.error)}</small></div><button type="button" class="icon-button" data-remove-narrative="${i}" aria-label="삭제">×</button></div>`;
+       return `<div class="file-info"><span class="badge blue">${esc(f.ext)}</span><div class="file-name">${esc(f.file.name)}<small>서술형 문항 ${f.matches.length}개 · 응답 ${f.parsed.rows.length}행 확인</small></div><button type="button" class="icon-button" data-remove-narrative="${i}" aria-label="삭제">×</button></div>`;
+     }).join('');
+   }
+   async function addFinalNarrativeFiles(fileList){
+     for(const file of [...fileList]){
+       const ext=file.name.split('.').pop().toLowerCase();
+       if(!['csv','xlsx'].includes(ext)){toast(`"${file.name}"은(는) Excel(.xlsx) 또는 CSV(.csv) 파일이 아닙니다.`);continue;}
+       if(finalNarrativeFiles.some(f=>f.file.name===file.name&&f.file.size===file.size)){toast(`"${file.name}"은(는) 이미 등록된 파일입니다.`);continue;}
+       const entry={file,ext:ext.toUpperCase(),pending:true};
+       finalNarrativeFiles.push(entry);renderFinalNarrativeFiles();
+       try{
+         const parsed=ext==='csv'?S.parseCSV(await file.text()):await S.parseXLSXFile(file);
+         const matches=matchHeadersToTemplate('final',parsed.headers).filter(m=>m.row.type==='narrative');
+         if(!matches.length)throw new Error('서술형 항목과 일치하는 열을 찾지 못했습니다.');
+         entry.parsed=parsed;entry.matches=matches;entry.pending=false;
+       }catch(err){entry.pending=false;entry.error=err.message;}
+       renderFinalNarrativeFiles();
+     }
+     recomputeFinalNarrative();
+     const validCount=finalNarrativeFiles.filter(f=>f.matches&&f.matches.length).length;
+     if(validCount)toast(`서술형 응답 파일 ${validCount}개를 확인했습니다. 저장 시 AI 의견 분석에 반영됩니다.`);
+   }
+   $('finalHrdnetNarrativeInput').addEventListener('change',e=>{if(e.target.files.length)addFinalNarrativeFiles(e.target.files);e.target.value='';});
+   $('finalHrdnetNarrativeInfo').addEventListener('click',e=>{
+     const btn=e.target.closest('[data-remove-narrative]');if(!btn)return;
+     finalNarrativeFiles.splice(Number(btn.dataset.removeNarrative),1);
+     renderFinalNarrativeFiles();recomputeFinalNarrative();
+   });
    const hnzone=$('finalHrdnetNarrativeDropZone');
    ['dragenter','dragover'].forEach(ev=>hnzone.addEventListener(ev,e=>{e.preventDefault();hnzone.classList.add('drag');}));
    ['dragleave','drop'].forEach(ev=>hnzone.addEventListener(ev,e=>{e.preventDefault();hnzone.classList.remove('drag');}));
-   hnzone.addEventListener('drop',e=>{if(e.dataTransfer.files.length)handleFinalHrdnetNarrativeFile(e.dataTransfer.files[0]);});
+   hnzone.addEventListener('drop',e=>{if(e.dataTransfer.files.length)addFinalNarrativeFiles(e.dataTransfer.files);});
    document.querySelectorAll('[data-final-mode]').forEach(b=>b.addEventListener('click',()=>{
      const mode=b.dataset.finalMode;
      document.querySelectorAll('[data-final-mode]').forEach(x=>x.classList.toggle('primary',x===b));
      $('finalHrdnetBox').hidden=mode!=='hrdnet';$('finalSurveyBox').hidden=mode!=='survey';
-     state.finalExcelNarrative=null;
+     state.finalExcelNarrative=null;finalNarrativeFiles=[];renderFinalNarrativeFiles();
    }));
    let surveyParsed=null,surveyMatches=null;
    function renderSurveyMatchArea(){
@@ -1523,7 +1580,7 @@ window.DemoData = {
    state.uploadStep=1;const d=state.draft;
    const evalTypeOptions=bizEvalMode(d.businessId)==='final-only'?['최종평가']:['중간평가','최종평가'];
    openModal('평가자료 등록','선택한 기수에 평가 파일을 등록합니다.',
-   `<div class="steps"><span class="step active">① 중간평가 Excel 등록</span><span>→</span><span class="step">② 응답 데이터 확인</span><span>→</span><span class="step">③ AI 분석</span></div><div id="uploadHierarchy">${H.selectors(R,d,'upload',4,true,true)}</div><div class="field" style="margin:20px 0"><span class="label">⑤ 평가구분</span><div class="radio-group">${evalTypeOptions.map(t=>`<label><input type="radio" name="evaluationType" value="${t}" ${d.type===t?'checked':''}>${t}</label>`).join('')}</div></div><div class="form-grid"><div class="field"><label for="uploadScale">⑥ 원 평가척도</label><select id="uploadScale">${[5,7,10].map(n=>`<option value="${n}" ${d.scale===String(n)?'selected':''}>${n}점 만점</option>`).join('')}<option value="custom" ${d.scale==='custom'?'selected':''}>직접 입력</option></select><input id="uploadCustom" type="number" step="any" min="0.01" placeholder="만점 값 입력" aria-label="원 평가척도 직접 입력" value="${esc(d.customScale)}" ${d.scale!=='custom'?'hidden':''}></div><div class="field"><label for="uploadTarget">10점 환산 기준</label><input id="uploadTarget" value="${D.config.targetScale}점 만점" readonly></div></div><div class="field"><span class="label">⑦ 평가 파일</span></div><label class="upload-zone" id="dropZone"><span class="upload-icon">↥</span><strong>파일을 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>Excel .xlsx, .xls / CSV .csv · 최대 20MB</small><input id="evaluationFile" class="file-input" type="file" accept=".xlsx,.xls,.csv" aria-label="평가 파일 선택"></label><div id="fileBlock">${fileBlock()}</div><div class="notice" style="margin:18px 0 0">ⓘ <span>평가 정보와 분석 결과를 해당 기수 아래에 저장합니다.</span></div><div class="error" id="uploadError" role="alert"></div>`,button('취소','close-modal')+button('데이터 확인 →','confirm-upload','primary'));
+   `<div class="steps"><span class="step active">① 중간평가 Excel 등록</span><span>→</span><span class="step">② 응답 데이터 확인</span><span>→</span><span class="step">③ AI 분석</span></div><div id="uploadHierarchy">${H.selectors(R,d,'upload',4,true,true,true)}</div><div class="field" style="margin:20px 0"><span class="label">⑤ 평가구분</span><div class="radio-group">${evalTypeOptions.map(t=>`<label><input type="radio" name="evaluationType" value="${t}" ${d.type===t?'checked':''}>${t}</label>`).join('')}</div></div><div class="form-grid"><div class="field"><label for="uploadScale">⑥ 원 평가척도</label><select id="uploadScale">${[5,7,10].map(n=>`<option value="${n}" ${d.scale===String(n)?'selected':''}>${n}점 만점</option>`).join('')}<option value="custom" ${d.scale==='custom'?'selected':''}>직접 입력</option></select><input id="uploadCustom" type="number" step="any" min="0.01" placeholder="만점 값 입력" aria-label="원 평가척도 직접 입력" value="${esc(d.customScale)}" ${d.scale!=='custom'?'hidden':''}></div><div class="field"><label for="uploadTarget">10점 환산 기준</label><input id="uploadTarget" value="${D.config.targetScale}점 만점" readonly></div></div><div class="field"><span class="label">⑦ 평가 파일</span></div><label class="upload-zone" id="dropZone"><span class="upload-icon">↥</span><strong>파일을 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>Excel .xlsx, .xls / CSV .csv · 최대 20MB</small><input id="evaluationFile" class="file-input" type="file" accept=".xlsx,.xls,.csv" aria-label="평가 파일 선택"></label><div id="fileBlock">${fileBlock()}</div><div class="notice" style="margin:18px 0 0">ⓘ <span>평가 정보와 분석 결과를 해당 기수 아래에 저장합니다.</span></div><div class="error" id="uploadError" role="alert"></div>`,button('취소','close-modal')+button('데이터 확인 →','confirm-upload','primary'));
    $('evaluationFile').addEventListener('change',e=>{if(e.target.files[0])chooseFile(e.target.files[0]);});
    const zone=$('dropZone');['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('drag');}));['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('drag');}));zone.addEventListener('drop',e=>{if(e.dataTransfer.files.length!==1){$('uploadError').textContent='한 번에 파일 1개를 선택해주세요.';return;}chooseFile(e.dataTransfer.files[0]);});
    $('uploadScale').addEventListener('change',()=>{$('uploadCustom').hidden=$('uploadScale').value!=='custom';});
@@ -1861,8 +1918,13 @@ window.DemoData = {
      }
    }catch(e){const el=$('bizError');if(el)el.textContent=e.message;}
  }
- function entityForm(){const x=state.entity,depth={business:0,company:1,course:2,cohort:3}[x.kind],bl=bizLabels(x.parents.businessId),label={business:'사업명',company:bl.company+'명',course:bl.course+'명',cohort:'기수'}[x.kind];return `${depth?H.selectors(R,x.parents,'entity',depth,true):''}<div class="field" style="margin-top:16px"><label for="entityName">${label}</label><input id="entityName" maxlength="120" value="${esc(x.name)}" placeholder="${label} 입력"></div><div class="error" id="entityError" role="alert"></div>`;}
- function openEntity(kind,origin){if(origin==='upload')captureDraft();state.entity={kind,origin,parents:{...(origin==='upload'?state.draft:state.filters)},name:''};const bl=bizLabels(state.entity.parents.businessId);const label={business:'사업',company:bl.company,course:bl.course,cohort:'기수'}[kind];$('entityModal').innerHTML=`<div class="modal-head"><div><h2 id="entityTitle">새 ${label} 등록</h2><p>소속 정보를 확인한 뒤 등록해주세요.</p></div><button class="icon-button" data-action="close-entity" aria-label="등록 창 닫기">×</button></div><div class="modal-body" id="entityBody">${entityForm()}</div><div class="modal-foot">${button('취소','close-entity')}${button('등록','save-entity','primary')}</div>`;$('entityModal').showModal();$('entityName').focus();}
+ function entityForm(){const x=state.entity,depth={business:0,company:1,course:2,cohort:3}[x.kind],bl=bizLabels(x.parents.businessId),label={business:'사업명',company:bl.company+'명',course:bl.course+'명',cohort:'기수'}[x.kind];return `${depth?H.selectors(R,x.parents,'entity',depth,true,false,true):''}<div class="field" style="margin-top:16px"><label for="entityName">${label}</label><input id="entityName" maxlength="120" value="${esc(x.name)}" placeholder="${label} 입력"></div><div class="error" id="entityError" role="alert"></div>`;}
+ function openEntity(kind,origin){
+   if(origin==='upload')captureDraft();
+   const parents={...(origin==='upload'?state.draft:state.filters)};
+   if(kind!=='business'&&!parents.businessId){toast('사업을 등록하려면 먼저 왼쪽 "현재 사업"에서 사업을 선택해주세요.');return;}
+   state.entity={kind,origin,parents,name:''};const bl=bizLabels(state.entity.parents.businessId);const label={business:'사업',company:bl.company,course:bl.course,cohort:'기수'}[kind];$('entityModal').innerHTML=`<div class="modal-head"><div><h2 id="entityTitle">새 ${label} 등록</h2><p>소속 정보를 확인한 뒤 등록해주세요.</p></div><button class="icon-button" data-action="close-entity" aria-label="등록 창 닫기">×</button></div><div class="modal-body" id="entityBody">${entityForm()}</div><div class="modal-foot">${button('취소','close-entity')}${button('등록','save-entity','primary')}</div>`;$('entityModal').showModal();$('entityName').focus();
+ }
  function saveEntity(){
    const x=state.entity,foreign={company:'businessId',course:'companyId',cohort:'courseId'}[x.kind];
    try{const item=R.addEntity(x.kind,$('entityName').value,foreign?x.parents[foreign]:null,x.kind==='business'?{ownerId:state.currentUser.id}:{});const d=R.snapshot();let values={businessId:'',companyId:'',courseId:'',cohortId:''};
@@ -1875,7 +1937,7 @@ window.DemoData = {
  }
  function hierarchyChanged(input){
    const scope=input.dataset.hierarchy,key=input.dataset.level,value=input.value;
-   if(scope==='upload'){captureDraft();H.cascade(state.draft,key,value);$('uploadHierarchy').innerHTML=H.selectors(R,state.draft,'upload',4,true,true);return;}
+   if(scope==='upload'){captureDraft();H.cascade(state.draft,key,value);$('uploadHierarchy').innerHTML=H.selectors(R,state.draft,'upload',4,true,true,true);return;}
    if(scope==='entity'){state.entity.name=$('entityName').value;H.cascade(state.entity.parents,key,value);$('entityBody').innerHTML=entityForm();return;}
    H.cascade(state.filters,key,value);state.selected='';state.compareIds=[];state.issueFilter='전체';state.planResult=false;
    if(scope==='catalog')Object.assign(state.filters,{courseId:'',cohortId:''});if(scope==='comparison')state.filters.cohortId='';render();
