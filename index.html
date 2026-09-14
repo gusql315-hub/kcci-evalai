@@ -845,7 +845,8 @@ window.DemoData = {
  function renderNav(){const gb=$('globalBusiness');if(gb){const bs=state.currentUser?accessibleBusinesses(state.currentUser):[];gb.innerHTML=bs.map(b=>`<option value="${b.id}" ${b.id===state.filters.businessId?'selected':''}>${esc(b.name)}</option>`).join('');} const bl=bizLabels(state.filters.businessId);const navLabel=(route,label)=>route==='company-manage'?bl.company+' 관리':route==='course-manage'?bl.course+' 관리':label;$('nav').innerHTML=D.navigation.filter(navAllowed).map(([group,route,label,i])=>`${group?`<div class="nav-group">${group}</div>`:''}<a class="nav-item ${route===state.route?'active':''}" href="#${route}" ${route===state.route?'aria-current="page"':''}>${icon(i)}${esc(navLabel(route,label))}</a>`).join('');$('crumb').textContent=title();}
  function render(){renderNav();const views={dashboard,'business-manage':()=>management('business'),'company-manage':()=>management('company'),'course-manage':()=>management('course'),'cohort-manage':()=>management('cohort'),'final-template-manage':evalTemplateManagement,'user-manage':userManagePage,help:helpPage,catalog,final:analysis,interim:analysis,participants,improvements,plan,history};$('main').innerHTML=(R.warning?`<div class="notice warning">${esc(R.warning)}</div>`:'')+views[state.route]();
    renderDrawer();
-   if((state.route==='final'||state.route==='interim')&&state.selected)bindCalculator();}
+   if((state.route==='final'||state.route==='interim')&&state.selected)bindCalculator();
+   if(state.route==='plan'&&state.planMode==='edit'&&state.planCohortId)bindPlanDropZone();}
  function renderDrawer(){
    if(state.route==='final'&&state.analysisDetail){openDrawer('평가 분석 결과','',analysisDetailBody(),'','lg');return;}
    if(state.drawer?.type==='cohorts'){openDrawer(...cohortDrawerContent(state.drawer.courseId));return;}
@@ -1133,7 +1134,7 @@ window.DemoData = {
    const path=R.pathFromCohort(cohortId),store=planStore(),rec=store[cohortId]||{},evals=R.listEvaluations().filter(e=>e.courseId===path.course.id);const cohorts=R.snapshot().cohorts.filter(h=>h.courseId===path.course.id).slice().sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));const idx=cohorts.findIndex(h=>h.id===cohortId),previous=idx>0?cohorts[idx-1]:null;const prevEvals=previous?evals.filter(e=>e.cohortId===previous.id):[];const mid=prevEvals.find(e=>e.type==='중간평가'),fin=prevEvals.find(e=>e.type==='최종평가');state.planText=rec.text||'';
    const basis=previous?`${previous.name} 평가결과${mid?' · 중간평가':''}${fin?' · 최종평가':''}`:'이전 기수 없음';
    return heading(`${path.cohort.name} 운영계획서 AI 검토`,`${path.company.name} › ${path.course.name}`)+`<div class="analysis-back">${button('← 기수별 계획서','plan-course','subtle',`data-id="${path.course.id}"`)}</div>`+
-   `<section class="card card-pad section"><div class="card-head"><div><h2>운영계획서 등록</h2><p>운영계획서 파일을 업로드하면 문서 내용을 자동으로 추출하여 기본양식 작성기준과 이전 기수 평가결과를 함께 검토합니다.</p></div>${badge(basis,previous?'blue':'')}</div><label class="upload-zone" style="margin-top:14px"><span class="upload-icon">↥</span><strong>운영계획서를 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>HWP / HWPX · 업로드한 문서의 본문을 자동으로 읽어 검토합니다.</small><input id="planFile" class="file-input" type="file" accept=".hwp,.hwpx" aria-label="운영계획서 파일 선택"></label><div id="planFileStatus" class="notice" style="margin-top:14px">${rec.fileName?`<span style="flex:1"><strong>${esc(rec.fileName)}</strong><br>✓ 계획서 내용 추출 완료 · ${Number(rec.textLength||rec.text?.length||0).toLocaleString()}자 인식${rec.updatedAt?` · ${new Date(rec.updatedAt).toLocaleString('ko-KR')}`:''}</span>${button('삭제','delete-plan-file','subtle small danger')}`:'<span>운영계획서 파일을 선택하면 문서 내용을 자동으로 추출합니다. 별도의 내용 입력은 필요하지 않습니다.</span>'}</div><div class="actions" style="margin-top:13px">${button('계획서 저장','save-plan','subtle')}${button('AI 검토 실행','review-plan-v2','primary')}</div><div class="error" id="planError"></div></section>`+
+   `<section class="card card-pad section"><div class="card-head"><div><h2>운영계획서 등록</h2><p>운영계획서 파일을 업로드하면 문서 내용을 자동으로 추출하여 기본양식 작성기준과 이전 기수 평가결과를 함께 검토합니다.</p></div>${badge(basis,previous?'blue':'')}</div><label class="upload-zone" id="planDropZone" style="margin-top:14px"><span class="upload-icon">↥</span><strong>운영계획서를 여기로 끌어오거나 <span class="blue">파일 선택</span></strong><small>HWP / HWPX / Word · 업로드한 문서의 본문을 자동으로 읽어 검토합니다.</small><input id="planFile" class="file-input" type="file" accept=".hwp,.hwpx,.doc,.docx" aria-label="운영계획서 파일 선택"></label><div id="planFileStatus" class="notice" style="margin-top:14px">${rec.fileName?`<span style="flex:1"><strong>${esc(rec.fileName)}</strong><br>✓ 계획서 내용 추출 완료 · ${Number(rec.textLength||rec.text?.length||0).toLocaleString()}자 인식${rec.updatedAt?` · ${new Date(rec.updatedAt).toLocaleString('ko-KR')}`:''}</span>${button('삭제','delete-plan-file','subtle small danger')}`:'<span>운영계획서 파일을 선택하면 문서 내용을 자동으로 추출합니다. 별도의 내용 입력은 필요하지 않습니다.</span>'}</div><div class="actions" style="margin-top:13px">${button('계획서 저장','save-plan','subtle')}${button('AI 검토 실행','review-plan-v2','primary')}</div><div class="error" id="planError"></div></section>`+
    `<div id="planOutput">${rec.reviewed?planReviewV2(rec.text||'',!!prevEvals.length):`<section class="card card-pad section"><div class="card-head"><div><h2>검토 예정 항목</h2><p>AI 검토를 실행하면 아래 두 기준을 함께 확인합니다.</p></div></div><div class="plan-flow"><div><strong>① 전 기수 평가 반영</strong><span class="muted">개선사항 반영 및 강점 유지 필요 여부</span></div><div><strong>② 기본양식 작성기준</strong><span class="muted">15개 검토영역 충족 여부</span></div><div><strong>③ 우선 보완사항</strong><span class="muted">수정 위치와 구체적인 보완 방향</span></div></div></section>`}</div>`;
  }
  function planLocate(text,keys,fallback){
@@ -1234,9 +1235,91 @@ window.DemoData = {
      setTimeout(()=>{try{frame.contentWindow.focus();frame.contentWindow.print();}catch(e){toast('PDF 출력 창을 열지 못했습니다. 브라우저 인쇄 설정을 확인해주세요.');}setTimeout(()=>frame.remove(),1200);},350);
    }catch(e){toast('검토의견서 PDF 출력을 준비하지 못했습니다.');}
  }
+ async function extractDocxText(buf){
+   if(typeof JSZip==='undefined')throw new Error('DOCX 문서 해석 모듈을 불러오지 못했습니다.');
+   const zip=await JSZip.loadAsync(buf);
+   const entry=zip.files['word/document.xml'];
+   if(!entry)throw new Error('DOCX 본문 영역을 찾지 못했습니다.');
+   const xml=await entry.async('string');
+   const doc=new DOMParser().parseFromString(xml,'application/xml');
+   const paras=Array.from(doc.querySelectorAll('p'));
+   let text='';
+   for(const p of paras)text+=' '+Array.from(p.querySelectorAll('t')).map(t=>t.textContent||'').join('');
+   text=text.replace(/\s+/g,' ').trim();
+   if(text.length<50)throw new Error('DOCX 본문 내용을 충분히 추출하지 못했습니다.');
+   return text;
+ }
+ // 구형 DOC(OLE 복합 문서)의 본문은 CFB 컨테이너 안의 WordDocument/Table 스트림을 스펙에 따라
+ // 직접 해석해 조각(Piece) 단위로 읽는다. 바이트를 임의로 문자열 변환하지 않고, 실제 문서 구조를
+ // 따라가 원문을 그대로 복원한다(잘못된 근거 제시 방지).
+ function extractDocText(buf){
+   const bytes=new Uint8Array(buf);
+   if(bytes.length<512||new DataView(buf).getUint32(0,true)!==0xE011CFD0||new DataView(buf).getUint32(4,true)!==0xE11AB1A1)throw new Error('DOC 파일 구조를 인식하지 못했습니다.');
+   const header=new DataView(buf,0,512);
+   const sectorSize=1<<header.getUint16(0x1E,true);
+   const numFATSectors=header.getUint32(0x2C,true);
+   const firstDirSector=header.getUint32(0x30,true);
+   const fatSectorLocs=[];
+   for(let i=0;i<109&&fatSectorLocs.length<numFATSectors;i++){const loc=header.getUint32(0x4C+i*4,true);if(loc===0xFFFFFFFF)break;fatSectorLocs.push(loc);}
+   if(fatSectorLocs.length<numFATSectors)throw new Error('DOC 파일 구조가 지원 범위를 벗어납니다.');
+   const entriesPerSector=sectorSize/4;
+   const fat=new Int32Array(fatSectorLocs.length*entriesPerSector);
+   fatSectorLocs.forEach((loc,idx)=>{const start=sectorSize*(loc+1);for(let j=0;j<entriesPerSector;j++)fat[idx*entriesPerSector+j]=new DataView(buf,start+j*4,4).getInt32(0,true);});
+   function readFullChain(firstSector){
+     const chunks=[];let sector=firstSector,guard=0;
+     while(sector>=0&&guard++<1000000){const start=sectorSize*(sector+1);chunks.push(bytes.subarray(start,start+sectorSize));sector=fat[sector];}
+     const total=chunks.reduce((a,c)=>a+c.length,0),out=new Uint8Array(total);let off=0;for(const c of chunks){out.set(c,off);off+=c.length;}return out;
+   }
+   const dirData=readFullChain(firstDirSector),dirView=new DataView(dirData.buffer);
+   const entries=[];
+   for(let off=0;off+128<=dirData.length;off+=128){
+     const type=dirData[off+0x42]; if(type===0)continue;
+     const nameLenBytes=dirView.getUint16(off+0x40,true);
+     const name=nameLenBytes>=2?new TextDecoder('utf-16le').decode(dirData.subarray(off,off+nameLenBytes-2)):'';
+     entries.push({name,type,startSector:dirView.getInt32(off+0x74,true),size:dirView.getUint32(off+0x78,true)});
+   }
+   const wordDocEntry=entries.find(e=>e.name==='WordDocument');
+   if(!wordDocEntry)throw new Error('DOC 문서에서 본문 스트림을 찾지 못했습니다.');
+   const wordDocBytes=readFullChain(wordDocEntry.startSector).subarray(0,wordDocEntry.size);
+   if(wordDocBytes.length<0x1AA)throw new Error('DOC 문서 구조가 예상과 달라 본문을 추출하지 못했습니다.');
+   const fibView=new DataView(wordDocBytes.buffer,wordDocBytes.byteOffset,wordDocBytes.length);
+   const nFib=fibView.getUint16(2,true);
+   if(nFib<101)throw new Error('구버전(Word 6.0/95) 형식의 DOC는 지원하지 않습니다.');
+   const fWhichTblStm=(fibView.getUint16(0x0A,true)>>9)&1;
+   const tableEntry=entries.find(e=>e.name===(fWhichTblStm?'1Table':'0Table'));
+   if(!tableEntry)throw new Error('DOC 문서에서 서식 정보 스트림을 찾지 못했습니다.');
+   const tableBytes=readFullChain(tableEntry.startSector).subarray(0,tableEntry.size);
+   const tableView=new DataView(tableBytes.buffer,tableBytes.byteOffset,tableBytes.length);
+   const fcClx=fibView.getUint32(0x1A2,true),lcbClx=fibView.getUint32(0x1A6,true);
+   if(!lcbClx||fcClx+lcbClx>tableBytes.length)throw new Error('DOC 문서의 서식 정보(Clx)를 읽지 못했습니다.');
+   let p=fcClx,end=fcClx+lcbClx,pcdtOffset=-1,pcdtLen=0;
+   while(p<end){
+     const marker=tableBytes[p];
+     if(marker===1){const cbGrpprl=tableView.getUint16(p+1,true);p+=1+2+cbGrpprl;}
+     else if(marker===2){pcdtLen=tableView.getUint32(p+1,true);pcdtOffset=p+5;break;}
+     else throw new Error('DOC 문서의 서식 정보 구조를 해석하지 못했습니다.');
+   }
+   if(pcdtOffset<0)throw new Error('DOC 문서에서 텍스트 위치 정보를 찾지 못했습니다.');
+   const n=Math.floor((pcdtLen-4)/12);
+   if(n<=0)throw new Error('DOC 문서에 추출할 텍스트 조각이 없습니다.');
+   const cpArr=[];for(let i=0;i<=n;i++)cpArr.push(tableView.getUint32(pcdtOffset+i*4,true));
+   const pcdBase=pcdtOffset+4*(n+1);
+   let out='';
+   for(let i=0;i<n;i++){
+     const fcRaw=tableView.getUint32(pcdBase+i*8+2,true);
+     const compressed=(fcRaw&0x40000000)!==0;
+     let fc=fcRaw&0xBFFFFFFF;
+     const charCount=cpArr[i+1]-cpArr[i]; if(charCount<=0)continue;
+     if(compressed){fc=Math.floor(fc/2);out+=new TextDecoder('windows-1252').decode(wordDocBytes.subarray(fc,fc+charCount));}
+     else out+=new TextDecoder('utf-16le').decode(wordDocBytes.subarray(fc,fc+charCount*2));
+   }
+   out=out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,' ').replace(/\s+/g,' ').trim();
+   if(out.length<50)throw new Error('DOC 본문 내용을 충분히 추출하지 못했습니다.');
+   return out;
+ }
  async function extractPlanFile(file){
    const ext=(file.name.split('.').pop()||'').toLowerCase();
-   if(!['hwp','hwpx'].includes(ext))throw new Error('HWP 또는 HWPX 파일을 선택해주세요.');
+   if(!['hwp','hwpx','doc','docx'].includes(ext))throw new Error('HWP, HWPX 또는 Word(.doc/.docx) 파일을 선택해주세요.');
    const buf=await file.arrayBuffer();
    if(ext==='hwpx'){
      if(typeof JSZip==='undefined')throw new Error('HWPX 문서 해석 모듈을 불러오지 못했습니다.');
@@ -1245,6 +1328,11 @@ window.DemoData = {
      let text='';
      for(const name of names){const xml=await zip.files[name].async('string');const doc=new DOMParser().parseFromString(xml,'application/xml');const paras=Array.from(doc.querySelectorAll('p'));if(paras.length){for(const p of paras){const pageBreak=Array.from(p.attributes||[]).some(a=>/pagebreak/i.test(a.name)&&/^(1|true)$/i.test(a.value))||!!p.querySelector('[pageBreak="1"],[pageBreak="true"],pageBreak');if(pageBreak&&text.trim())text+=' [[PAGE_BREAK]] ';text+=' '+Array.from(p.querySelectorAll('t')).map(x=>x.textContent||'').join(' ');}}else{text+=' '+Array.from(doc.querySelectorAll('t')).map(x=>x.textContent||'').join(' ');}}
      text=text.replace(/\s+/g,' ').trim();if(text.length<50)throw new Error('HWPX 본문 내용을 충분히 추출하지 못했습니다.');return text;
+   }
+   if(ext==='docx')return extractDocxText(buf);
+   if(ext==='doc'){
+     try{return extractDocText(buf);}
+     catch(e){throw new Error(`${e.message} Word에서 [다른 이름으로 저장] → .docx 형식으로 저장한 뒤 다시 업로드해주세요.`);}
    }
    // 구형 HWP는 OLE/압축 구조를 정확히 해석하지 않은 상태에서 바이트를 UTF-16 문자열로 읽으면
    // 정상 한글처럼 보이는 임의 문자가 섞일 수 있다. 잘못된 원문 근거 제시를 방지하기 위해 추정 추출을 금지한다.
@@ -1255,6 +1343,18 @@ window.DemoData = {
    err.textContent='';status.innerHTML='<span><strong>'+esc(file.name)+'</strong><br>문서 내용을 읽는 중입니다...</span>';
    try{const text=await extractPlanFile(file),st=planStore();st[state.planCohortId]={...(st[state.planCohortId]||{}),text,fileName:file.name,textLength:text.length,reviewed:false,updatedAt:new Date().toISOString()};savePlanStore(st);state.planText=text;status.innerHTML='<span><strong>'+esc(file.name)+'</strong><br>✓ 계획서 내용 추출 완료 · '+text.length.toLocaleString()+'자 인식<br>✓ 기본양식 15개 검토영역 분석 준비 완료</span>';toast('운영계획서 내용을 자동으로 읽었습니다.');}
    catch(ex){status.innerHTML='<span><strong>'+esc(file.name)+'</strong><br>문서 내용 추출 실패</span>';err.textContent=ex.message;}
+ }
+ function bindPlanDropZone(){
+   const zone=$('planDropZone'); if(!zone||zone.dataset.bound)return; zone.dataset.bound='1';
+   const validExts=['hwp','hwpx','doc','docx'];
+   ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('drag');}));
+   ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('drag');}));
+   zone.addEventListener('drop',e=>{
+     if(e.dataTransfer.files.length!==1){$('planError').textContent='한 번에 파일 1개를 선택해주세요.';return;}
+     const file=e.dataTransfer.files[0],ext=(file.name.split('.').pop()||'').toLowerCase();
+     if(!validExts.includes(ext)){$('planError').textContent='HWP, HWPX 또는 Word(.doc/.docx) 파일을 선택해주세요.';return;}
+     handlePlanFile(file);
+   });
  }
  function filteredHistory(){return state.evaluations.filter(e=>(e.course+' '+e.round+' '+e.type).toLowerCase().includes(state.search.toLowerCase())).sort((a,b)=>state.historySort==='course'?a.course.localeCompare(b.course,'ko'):state.historySort==='count'?b.count-a.count:b.date.localeCompare(a.date));}
  function history(){return heading('분석 이력','등록한 평가와 시연용 분석 결과를 다시 확인하세요.')+contextPanel(false)+`<div class="notice">ⓘ <span>등록 정보와 분석 결과는 이 브라우저에 저장됩니다. 원본 파일 자체는 보관하지 않습니다.</span></div><div class="filter-bar"><div class="actions"><input id="historySearch" class="search" placeholder="과정명, 회차 또는 평가구분 검색" aria-label="분석 이력 검색" value="${esc(state.search)}"></div><select id="historySort" aria-label="분석 이력 정렬">${[['newest','최신순'],['course','과정명순'],['count','응답수 많은 순']].map(([v,t])=>`<option value="${v}" ${state.historySort===v?'selected':''}>${t}</option>`).join('')}</select></div><section class="card" id="historyTable">${evalTable(filteredHistory())}</section>`;}
