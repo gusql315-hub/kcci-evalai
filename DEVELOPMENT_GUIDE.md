@@ -102,7 +102,9 @@ role 체크 로직을 새로 작성하지 않습니다.
 | `extractNarrativeColumn(rows, colIndex)` / `buildNarrativeItem(row, colIndex, rows)` | 서술형 열에서 실제 응답을 추출하고, 건수·요약·반복 키워드를 계산한다. |
 | `keywordFrequency(responses, topN)` / `tokenizeNarrative(text)` | 실제 응답 텍스트 기반 키워드 빈도 계산(불용어 제외). |
 | `classifyNarrativeSentiment(text)` | 긍정/부정 단어 사전 기반의 단순 감성 분류. |
-| `buildNarrativeAnalysis(matchedNarrativeCols, rows)` | 서술형 문항 분석(`narrativeItems`)과, 기존 canned 분석 화면(키워드/의견/개선방안/참여자별 피드백)과 **동일한 데이터 모양**으로 만든 `adapter`(실응답 기반 대체 데이터)를 함께 반환한다. `applyTemplateMatching()`(중간평가 자동 분석)과 `saveFinalEntry()`(최종평가 서술형 파일 업로드)가 이 함수를 공유한다. |
+| `buildNarrativeAnalysis(matchedNarrativeCols, rows)` | 파일 1개 기준 서술형 문항 분석(`narrativeItems`)과, 기존 canned 분석 화면(키워드/의견/개선방안/참여자별 피드백)과 **동일한 데이터 모양**으로 만든 `adapter`(실응답 기반 대체 데이터)를 함께 반환한다. `applyTemplateMatching()`(중간평가 자동 분석)과 「자체 설문 결과」 업로드가 이 함수를 사용한다. |
+| `buildNarrativeAnalysisFromFiles(fileDatasets)` | **여러 파일**의 서술형 응답을 문항 단위로 합쳐 하나의 분석 결과로 만든다(`fileDatasets:[{matches,rows}, ...]`). 응답자 ID를 파일 간 전역으로 다시 매겨 중복 집계 없이 합산한다. 「HRD-Net 평가결과」의 서술형 응답 다중 업로드가 사용하는 함수 — 여러 파일을 다뤄야 하면 이 함수를 재사용한다. |
+| `buildNarrativeItemFromResponses(row, totalCount, responses)` / `buildAdapterFromRespondents(respondents)` | 위 두 함수가 공유하는 내부 로직(문항 하나 요약 / 응답자 목록 → adapter). 단일 파일이든 여러 파일 합산이든 이 두 함수로 귀결되므로, 분석 로직을 고칠 때는 여기를 고치면 양쪽에 모두 적용된다. |
 | `parseXLSXFile(file)` (Services) | JSZip(이미 내장됨)으로 `.xlsx`를 직접 읽어 `{headers, rows}`로 반환한다. `.xlsx`도 CSV와 동일하게 실제 매칭에 사용된다. |
 
 새 화면에서 "실응답 기반인지 canned 샘플인지"를 구분해야 할 때는 `analysis.realNarrative` 플래그를 확인하세요
@@ -126,6 +128,35 @@ Excel/CSV 열 제목이 등록된 질문과 정확히 같지 않아도, 문자 b
 이 매칭 결과 화면(Excel 질문 / 등록된 평가항목 드롭다운 / 매칭 상태 배지)은 「최종만족도평가 결과 입력」의
 "응답 Excel 파일" 입력 방식에 구현되어 있습니다. 비슷한 업로드-매칭 기능이 필요하면 이 UI 패턴과 위 함수들을
 그대로 재사용하고, 화면마다 새로운 매칭 로직을 만들지 마세요.
+
+### 8. 파일 업로드는 항상 삭제·교체가 가능해야 한다
+
+**사용자가 잘못된 파일을 등록할 수 있으므로, 파일 업로드 기능을 만들 때는 삭제(교체) 기능을 기본으로
+함께 제공합니다.** 업로드 후 되돌릴 방법이 없는 "1회성 업로드"는 만들지 않습니다.
+
+참고 구현(최종만족도평가 결과 입력 · HRD-Net "서술형 응답 파일"):
+- 파일을 여러 개 선택하거나, 이미 올린 파일이 있는 상태에서 계속 추가할 수 있다(`<input multiple>`).
+- 업로드한 파일마다 이름·상태를 담은 카드를 목록으로 보여주고, 카드마다 개별 삭제(×) 버튼을 둔다.
+- 목록을 다루는 배열(예: `finalNarrativeFiles`)을 두고, 추가/삭제 시마다 렌더 함수로 목록을 다시 그리고
+  분석 결과를 `recompute...()`로 다시 계산한다 — 파일 목록과 분석 결과가 항상 동기화되도록 한다.
+- 같은 파일(파일명+크기가 동일)을 다시 올리면 안내만 하고 목록에 중복 추가하지 않는다(이중 집계 방지).
+
+이미지 업로드(HRD-Net "평가결과 화면 캡처")도 같은 패턴(`finalImages` 배열 + `renderFinalImages()` +
+개별 삭제 버튼)을 이미 쓰고 있으니, 새 업로드 기능은 이 두 구현을 그대로 참고하세요.
+
+### 9. 사업에 종속되는 등록 폼: 사업은 항상 "현재 사업" 기준으로 잠근다
+
+기업/과정/기수 신규 등록, 평가자료 업로드처럼 **특정 사업에 종속되는 데이터를 등록하는 화면**에서는
+사업을 드롭다운으로 다시 고르게 하지 않습니다. 좌측 "현재 사업"에서 이미 선택된 사업을 그대로 사용하고,
+화면에는 읽기 전용으로만 보여줍니다. 다른 사업에 등록하려면 사용자가 좌측에서 사업을 먼저 바꿔야 합니다.
+
+| 함수/파라미터 | 역할 |
+|---|---|
+| `H.selectors(repo, values, scope, depth, required, add, lockBusiness)` | 마지막 `lockBusiness:true`를 넘기면 사업(1단계) 항목을 `<select>`가 아니라 읽기 전용 `<input>`으로 렌더링한다. 기업/과정/기수 등 하위 단계는 그대로 선택 가능. `entityForm()`(기업·과정·기수 등록)과 평가자료 업로드 마법사(`newEvaluation`, `hierarchyChanged`의 upload 분기)가 사용한다. |
+| `openEntity(kind, origin)` | 사업 종속 등록(`kind!=='business'`)인데 `현재 사업`이 선택되어 있지 않으면 등록 창을 열지 않고 "사업을 먼저 선택해주세요" 안내만 표시한다. |
+
+새로운 등록 화면을 사업 하위에 추가할 때는 이 패턴을 그대로 재사용하세요 — 화면마다 "사업 선택" 드롭다운을
+새로 만들지 않습니다.
 
 ## 새 컴포넌트를 추가할 때 체크리스트
 
